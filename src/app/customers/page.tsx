@@ -6,7 +6,7 @@ import { ConsentStatus } from '@/types';
 import { saveCustomer } from '@/lib/storage';
 import { ConsentBadge } from '@/components/ConsentBadge';
 import { CsvImportModal } from '@/components/CsvImportModal';
-import { formatNgn, formatRelativeTime } from '@/lib/utils';
+import { formatNgn, formatRelativeTime, getWhatsAppUrl } from '@/lib/utils';
 import {
   Users,
   Search,
@@ -20,6 +20,7 @@ import {
   XCircle,
   AlertCircle,
   X,
+  MessageCircle,
 } from 'lucide-react';
 
 export default function CustomersPage() {
@@ -323,6 +324,21 @@ export default function CustomersPage() {
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    {cust.consent_status === 'consented' && activeBusiness && (
+                      <a
+                        href={getWhatsAppUrl(
+                          cust.phone,
+                          `Hello ${cust.full_name.split(' ')[0]}! It's ${activeBusiness.name}. We'd love to see you again soon — reply to book your preferred slot this week!`
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Send WhatsApp re-invite"
+                        className="px-2.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg flex items-center gap-1 transition shadow-2xs"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">WhatsApp</span>
+                      </a>
+                    )}
                     <button
                       onClick={() => openRecordSaleModal(cust.id)}
                       title="Record a visit for this customer"

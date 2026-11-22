@@ -10,18 +10,20 @@ import Link from 'next/link';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  initialShowPrintCard?: boolean;
 }
 
-export function QrCodeModal({ isOpen, onClose }: Props) {
+export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: Props) {
   const [business, setBusiness] = useState<Business | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [optInUrl, setOptInUrl] = useState<string>('');
-  const [showPrintCard, setShowPrintCard] = useState(false);
+  const [showPrintCard, setShowPrintCard] = useState(initialShowPrintCard);
 
   useEffect(() => {
     if (!isOpen) return;
     const timer = setTimeout(() => {
+      setShowPrintCard(initialShowPrintCard);
       const biz = getActiveBusiness();
       setBusiness(biz);
 

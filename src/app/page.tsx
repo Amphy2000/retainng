@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useIsMounted } from '@/lib/useMounted';
 import { OnboardingBanner } from '@/components/OnboardingBanner';
 import { DailyShiftModal } from '@/components/DailyShiftModal';
-import { formatNgn, formatDate, formatRelativeTime } from '@/lib/utils';
+import { formatNgn, formatDate, formatRelativeTime, getWhatsAppUrl } from '@/lib/utils';
+import { recordSale } from '@/lib/storage';
 import {
   Users,
   Receipt,
@@ -15,7 +16,14 @@ import {
   QrCode,
   Send,
   ArrowRight,
-  Info,
+  Sparkles,
+  MessageCircle,
+  CheckCircle2,
+  Printer,
+  Zap,
+  Clock,
+  AlertTriangle,
+  HeartHandshake,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -24,6 +32,7 @@ export default function DashboardPage() {
     activeBusiness,
     customers,
     sales,
+    refreshData,
     openRecordSaleModal,
     openQrModal,
     openCustomerDetail,
@@ -31,6 +40,32 @@ export default function DashboardPage() {
 
   const mounted = useIsMounted();
   const [isDailyShiftOpen, setIsDailyShiftOpen] = useState(false);
+
+  // Quick 3-second check-in bar state (Grandma-simple)
+  const [quickCustomerId, setQuickCustomerId] = useState<string>('');
+  const [quickIsWalkin, setQuickIsWalkin] = useState<boolean>(false);
+  const [quickAmount, setQuickAmount] = useState<number>(5000);
+  const [quickCustomAmount, setQuickCustomAmount] = useState<string>('');
+  const [quickSuccessMsg, setQuickSuccessMsg] = useState<string | null>(null);
+
+  // Filter lapsed customers (visited previously but not in last 25+ days)
+  const lapsedCustomers = useMemo(() => {
+    const now = new Date();
+    return customers
+      .filter((c) => {
+        if (!c.last_visit_date) return false;
+        const diffDays = Math.floor(
+          (now.getTime() - new Date(c.last_visit_date).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        return diffDays >= 25;
+      })
+      .slice(0, 4);
+  }, [customers]);
+
+  // Estimated lost revenue from lapsed customers
+  const estimatedLostRevenue = useMemo(() => {
+    return lapsedCustomers.reduce((acc, c) => acc + (c.total_spent_ngn || 6000), 0);
+  }, [lapsedCustomers]);
 
   if (!mounted || !activeBusiness) {
     return (
@@ -52,12 +87,49 @@ export default function DashboardPage() {
   const todayStr = new Date().toISOString().split('T')[0];
   const todaySales = sales.filter((s) => s.visit_date === todayStr);
   const todayRevenueNgn = todaySales.reduce((acc, s) => acc + (Number(s.amount_ngn) || 0), 0);
+  const todayStaffCommission = Math.round(todayRevenueNgn * 0.4); // 40% standard split
 
   // Repeat customers (customers with 2 or more recorded sales/visits)
   const repeatCustomers = customers.filter((c) => (c.total_visits || 0) >= 2).length;
   const repeatRate = totalCustomers > 0 ? Math.round((repeatCustomers / totalCustomers) * 100) : 0;
 
   const recentSales = sales.slice(0, 6);
+
+  // Top 5 regulars for 1-tap quick check-in
+  const topRegulars = customers.slice(0, 5);
+
+  // Handle 3-second rapid check-in
+  function handleFastCheckIn() {
+    if (!activeBusiness) return;
+    const finalAmount = quickCustomAmount ? Number(quickCustomAmount) : quickAmount;
+    if (isNaN(finalAmount) || finalAmount <= 0) return;
+
+    if (quickIsWalkin) {
+      recordSale(activeBusiness.id, {
+        new_customer_name: 'Walk-in Guest',
+        new_customer_phone: '08000000000',
+        amount_ngn: finalAmount,
+        visit_date: todayStr,
+        service_or_product: 'General Service',
+        grant_marketing_consent: false,
+      });
+      setQuickSuccessMsg(`Logged ₦${finalAmount.toLocaleString()} walk-in visit!`);
+    } else {
+      const selectedId = quickCustomerId || (topRegulars[0]?.id ?? '');
+      if (!selectedId) return;
+      const cust = customers.find((c) => c.id === selectedId);
+      recordSale(activeBusiness.id, {
+        customer_id: selectedId,
+        amount_ngn: finalAmount,
+        visit_date: todayStr,
+        service_or_product: 'Regular Visit',
+      });
+      setQuickSuccessMsg(`Logged ₦${finalAmount.toLocaleString()} for ${cust?.full_name.split(' ')[0] || 'customer'}!`);
+    }
+
+    refreshData();
+    setTimeout(() => setQuickSuccessMsg(null), 3500);
+  }
 
   return (
     <div className="space-y-6">
@@ -67,7 +139,7 @@ export default function DashboardPage() {
         onOpenQrModal={openQrModal}
       />
 
-      {/* Welcome & Honest Record Notice */}
+      {/* Top Header & Quick Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -76,7 +148,7 @@ export default function DashboardPage() {
             </span>
             {activeBusiness.is_demo && (
               <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                Demo Data Active
+                Demo Mode Active
               </span>
             )}
           </div>
@@ -95,7 +167,7 @@ export default function DashboardPage() {
             className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md transition cursor-pointer"
           >
             <PlusCircle className="w-4 h-4" />
-            <span>Record Sale / Visit</span>
+            <span>+ Full Record Modal</span>
           </button>
 
           <button
@@ -108,22 +180,251 @@ export default function DashboardPage() {
           </button>
 
           <button
-            onClick={openQrModal}
-            className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs transition"
+            onClick={() => openQrModal(true)}
+            className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-2xs transition"
           >
-            <QrCode className="w-4 h-4 text-emerald-600" />
-            <span className="hidden sm:inline">Opt-In QR</span>
+            <Printer className="w-4 h-4 text-emerald-400" />
+            <span>Print Counter Stand</span>
           </button>
         </div>
       </div>
 
-      {/* Honest Automation Disclaimer Banner */}
-      <div className="bg-slate-100/80 border border-slate-200/80 rounded-xl p-3 flex items-start gap-2.5 text-xs text-slate-600 leading-relaxed">
-        <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-        <div>
-          <strong className="text-slate-800">Honest record statement:</strong> All numbers shown below are calculated strictly from visits recorded in this app or customer self-registrations. We do not scrape WhatsApp chats, Instagram DMs, or physical cash registers without a verified POS integration.
+      {/* The Anti-Double-Bookkeeping Guarantee Card */}
+      <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200/80 rounded-2xl p-4 sm:p-5 shadow-2xs">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">
+                ✓
+              </span>
+              <h3 className="font-extrabold text-sm sm:text-base text-emerald-950">
+                Why RetainNG is NOT Bookkeeping
+              </h3>
+            </div>
+            <p className="text-xs text-emerald-900/90 leading-relaxed max-w-2xl">
+              Keep your POS, cash register, Moniepoint, or OPay unchanged. No balancing ledgers or entering expenses. RetainNG only watches who visited and alerts you when regular customers stop coming, so you can bring them back with 1-tap WhatsApp invites.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="px-3 py-1.5 bg-white/80 rounded-xl border border-emerald-200 text-[11px] font-bold text-emerald-800 flex items-center gap-1.5 shadow-2xs">
+              <Zap className="w-3.5 h-3.5 text-amber-600" />
+              <span>3-Second Check-in</span>
+            </div>
+            <div className="px-3 py-1.5 bg-white/80 rounded-xl border border-emerald-200 text-[11px] font-bold text-emerald-800 flex items-center gap-1.5 shadow-2xs">
+              <HeartHandshake className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Zero POS Conflict</span>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* ⚡ 3-SECOND RAPID CHECK-IN BAR (Grandma-Simple) */}
+      <div className="bg-white rounded-2xl border-2 border-emerald-500/30 p-4 sm:p-5 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-xs">
+              ⚡
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-extrabold text-slate-900">
+                3-Second Counter Check-In
+              </h2>
+              <p className="text-xs text-slate-500">
+                Tap who visited and amount. Even your newest staff or grandma can operate this!
+              </p>
+            </div>
+          </div>
+
+          {quickSuccessMsg && (
+            <div className="px-3 py-1.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-300 animate-in fade-in flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>{quickSuccessMsg}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Step 1: Customer Tap */}
+        <div className="space-y-1.5 pt-1">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            1. Select Customer:
+          </span>
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {/* Walk-in Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setQuickIsWalkin(true);
+                setQuickCustomerId('');
+              }}
+              className={`px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition flex items-center gap-1.5 cursor-pointer border ${
+                quickIsWalkin
+                  ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-xs'
+                  : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
+              }`}
+            >
+              <span>⚡ Fast Walk-in (No Name)</span>
+            </button>
+
+            {/* Top Regular Faces */}
+            {topRegulars.map((cust) => {
+              const isSelected = !quickIsWalkin && (quickCustomerId === cust.id || (!quickCustomerId && topRegulars[0]?.id === cust.id));
+              return (
+                <button
+                  key={cust.id}
+                  type="button"
+                  onClick={() => {
+                    setQuickIsWalkin(false);
+                    setQuickCustomerId(cust.id);
+                  }}
+                  className={`px-3 py-2 rounded-xl text-xs shrink-0 transition flex items-center gap-2 cursor-pointer border ${
+                    isSelected
+                      ? 'bg-emerald-700 text-white border-emerald-700 font-extrabold shadow-xs'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200 font-medium'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                    isSelected ? 'bg-white text-emerald-800' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {cust.full_name.charAt(0)}
+                  </span>
+                  <span>{cust.full_name.split(' ')[0]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Step 2: Amount Tap & Save in 1 line */}
+        <div className="space-y-1.5 pt-1">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            2. Tap Amount & Save:
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {[2500, 5000, 7500, 10000, 15000].map((amt) => {
+              const isSelected = !quickCustomAmount && quickAmount === amt;
+              return (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => {
+                    setQuickAmount(amt);
+                    setQuickCustomAmount('');
+                  }}
+                  className={`px-3.5 py-2 text-xs rounded-xl font-bold transition border cursor-pointer ${
+                    isSelected
+                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  ₦{amt.toLocaleString()}
+                </button>
+              );
+            })}
+
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                ₦
+              </span>
+              <input
+                type="number"
+                placeholder="Other"
+                value={quickCustomAmount}
+                onChange={(e) => setQuickCustomAmount(e.target.value)}
+                className="w-24 pl-6 pr-2 py-1.5 text-xs font-bold rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            {/* BIG ACTION BUTTON */}
+            <button
+              type="button"
+              onClick={handleFastCheckIn}
+              className="ml-auto px-5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>✓ Save Visit in 3s</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 🔥 THE PAINFUL PROBLEM SOLVED: LOST REVENUE RECOVERY */}
+      {lapsedCustomers.length > 0 && (
+        <div className="bg-white rounded-2xl border-2 border-rose-200 p-5 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center font-bold">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                  <span>Revenue Recovery Alert: Lapsed Regulars</span>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">
+                    {lapsedCustomers.length} slipping away
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  These customers used to visit regularly but haven&apos;t returned in 25+ days. Send a 1-tap WhatsApp invite to fill your quiet slots!
+                </p>
+              </div>
+            </div>
+
+            <div className="text-left sm:text-right shrink-0">
+              <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                Est. Revenue at Risk
+              </span>
+              <p className="text-base sm:text-lg font-black text-rose-600">
+                ~{formatNgn(estimatedLostRevenue)}
+              </p>
+            </div>
+          </div>
+
+          {/* Lapsed Customers Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {lapsedCustomers.map((cust) => {
+              const waMessage = `Hello ${cust.full_name.split(' ')[0]}! It's ${activeBusiness.name}. We noticed it's been a while since your last visit. We'd love to see you this week — show this message for ₦500 off your next service! Would you like us to save a slot for you this weekend?`;
+              const waUrl = getWhatsAppUrl(cust.phone, waMessage);
+
+              return (
+                <div
+                  key={cust.id}
+                  className="p-3.5 bg-rose-50/40 rounded-xl border border-rose-200/80 flex flex-col justify-between gap-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-900">{cust.full_name}</h4>
+                      <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                        <span className="text-rose-700 font-semibold flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Last seen: {formatRelativeTime(cust.last_visit_date)}
+                        </span>
+                        <span>•</span>
+                        <span>{cust.total_visits || 1} past visits</span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-extrabold text-slate-800 bg-white px-2 py-1 rounded-lg border border-rose-200">
+                      {formatNgn(cust.total_spent_ngn)} spent
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-rose-100">
+                    <span className="text-[11px] text-slate-500 font-mono">{cust.phone}</span>
+                    <a
+                      href={waUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>1-Tap WhatsApp Re-invite</span>
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Metric Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -162,7 +463,7 @@ export default function DashboardPage() {
           </p>
           <div className="flex items-center gap-1 mt-2 text-[11px] text-slate-500">
             <span className="font-semibold text-emerald-700">{consentedPct}%</span>
-            <span>of database can receive offers</span>
+            <span>ready for WhatsApp offers</span>
           </div>
         </div>
 
@@ -233,15 +534,8 @@ export default function DashboardPage() {
                 <Receipt className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                 <p className="text-sm font-semibold text-slate-700">No visits recorded yet</p>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Recording a customer visit takes 5 seconds on your phone. Start now to track repeat visits.
+                  Recording a customer visit takes 3 seconds with the rapid counter above.
                 </p>
-                <button
-                  onClick={() => openRecordSaleModal()}
-                  className="mt-4 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl inline-flex items-center gap-1.5 shadow-xs"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  <span>Record First Visit</span>
-                </button>
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
@@ -286,31 +580,73 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Right 1 Col: Quick Retention Shortcuts & Segments */}
+        {/* Right 1 Col: Zero-Effort Counter Stand & Staff Shift Summary */}
         <div className="space-y-4">
-          {/* Quick Counter QR Action Card */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 border border-slate-700 shadow-sm space-y-3">
+          {/* ZERO EFFORT COUNTER STAND CARD */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 text-white rounded-2xl p-5 border border-slate-800 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
-                Customer Self-Registration
+              <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5" />
+                Zero Staff Typing
               </span>
               <QrCode className="w-5 h-5 text-emerald-400" />
             </div>
             <h4 className="text-base font-bold text-white">
-              Display Your Counter Stand
+              Let Customers Check In Themselves
             </h4>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Let clients scan a QR code while at your shop to enter their details and grant explicit marketing consent.
+              Place your printed counter stand at the payment mirror or desk. Customers scan to get <strong className="text-emerald-400">₦500 OFF</strong>. Their phone number, visit, and marketing consent are logged automatically without staff lifting a finger!
             </p>
-            <div className="pt-1 flex items-center gap-2">
+            <div className="pt-1 flex flex-col gap-2">
               <button
-                onClick={openQrModal}
+                onClick={() => openQrModal(true)}
                 className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <QrCode className="w-4 h-4" />
-                <span>Show QR Code</span>
+                <Printer className="w-4 h-4" />
+                <span>🖨️ View & Print Counter Stand</span>
+              </button>
+
+              <Link
+                href={`/opt-in/${activeBusiness.opt_in_slug}`}
+                target="_blank"
+                className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl transition text-center"
+              >
+                Test Customer Form →
+              </Link>
+            </div>
+          </div>
+
+          {/* Today's Shift & Staff Commission Tally */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-amber-700 font-bold uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                  Staff Motivation
+                </span>
+                <h4 className="font-bold text-sm text-slate-900 mt-1">Today&apos;s Shift Tally</h4>
+              </div>
+              <button
+                onClick={() => setIsDailyShiftOpen(true)}
+                className="text-xs text-emerald-700 hover:underline font-semibold"
+              >
+                Full split →
               </button>
             </div>
+
+            <div className="grid grid-cols-2 gap-2 text-center p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div>
+                <span className="text-[10px] text-slate-500 font-semibold">Today&apos;s Clients</span>
+                <p className="text-xl font-black text-slate-900 mt-0.5">{todaySales.length}</p>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 font-semibold">Staff Commission (40%)</span>
+                <p className="text-xl font-black text-amber-600 mt-0.5">{formatNgn(todayStaffCommission)}</p>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              💡 Staff eagerly record visits because their end-of-day commission is tracked transparently with zero disputes.
+            </p>
           </div>
 
           {/* Retention Segments Teaser */}
@@ -322,7 +658,7 @@ export default function DashboardPage() {
               </Link>
             </div>
             <p className="text-xs text-slate-500">
-              Ready-made groups for honest re-engagement:
+              Targeted customer groups for WhatsApp re-engagement:
             </p>
 
             <div className="space-y-2">
@@ -332,7 +668,7 @@ export default function DashboardPage() {
               >
                 <div>
                   <p className="font-semibold text-slate-800">Lapsed (30+ Days Away)</p>
-                  <p className="text-[11px] text-slate-500">Past clients who haven’t visited</p>
+                  <p className="text-[11px] text-slate-500">Past clients who haven&apos;t visited</p>
                 </div>
                 <Send className="w-3.5 h-3.5 text-slate-400" />
               </Link>

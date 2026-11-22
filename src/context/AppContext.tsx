@@ -13,9 +13,10 @@ interface AppContextType {
   closeRecordSaleModal: () => void;
   isRecordSaleOpen: boolean;
   preselectedCustomerId?: string;
-  openQrModal: () => void;
+  openQrModal: (printCard?: boolean | unknown) => void;
   closeQrModal: () => void;
   isQrOpen: boolean;
+  isQrPrintCard: boolean;
   selectedCustomerIdForDetail: string | null;
   openCustomerDetail: (id: string) => void;
   closeCustomerDetail: () => void;
@@ -32,6 +33,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string | undefined>(undefined);
 
   const [isQrOpen, setIsQrOpen] = useState(false);
+  const [isQrPrintCard, setIsQrPrintCard] = useState(false);
   const [selectedCustomerIdForDetail, setSelectedCustomerIdForDetail] = useState<string | null>(null);
 
   function refreshData() {
@@ -60,12 +62,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPreselectedCustomerId(undefined);
   }
 
-  function openQrModal() {
+  function openQrModal(printCard?: boolean | unknown) {
+    setIsQrPrintCard(printCard === true);
     setIsQrOpen(true);
   }
 
   function closeQrModal() {
     setIsQrOpen(false);
+    setIsQrPrintCard(false);
   }
 
   function openCustomerDetail(id: string) {
@@ -90,6 +94,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         openQrModal,
         closeQrModal,
         isQrOpen,
+        isQrPrintCard,
         selectedCustomerIdForDetail,
         openCustomerDetail,
         closeCustomerDetail,

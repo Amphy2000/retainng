@@ -19,6 +19,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     preselectedCustomerId,
     openRecordSaleModal,
     isQrOpen,
+    isQrPrintCard,
     closeQrModal,
     openQrModal,
     selectedCustomerIdForDetail,
@@ -49,7 +50,11 @@ function ShellInner({ children }: { children: React.ReactNode }) {
         preselectedCustomerId={preselectedCustomerId}
       />
 
-      <QrCodeModal isOpen={isQrOpen} onClose={closeQrModal} />
+      <QrCodeModal
+        isOpen={isQrOpen}
+        onClose={closeQrModal}
+        initialShowPrintCard={isQrPrintCard}
+      />
 
       <CustomerDetailModal
         customerId={selectedCustomerIdForDetail}

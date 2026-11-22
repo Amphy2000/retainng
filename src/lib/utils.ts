@@ -51,3 +51,12 @@ export function cleanNigerianPhone(phone: string): string {
   }
   return phone;
 }
+
+export function getWhatsAppUrl(phone: string, message: string): string {
+  const digits = phone.replace(/\D/g, '');
+  let intlPhone = digits;
+  if (digits.startsWith('0') && digits.length === 11) {
+    intlPhone = `234${digits.substring(1)}`;
+  }
+  return `https://wa.me/${intlPhone}?text=${encodeURIComponent(message)}`;
+}
