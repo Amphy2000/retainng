@@ -63,6 +63,11 @@ export class ErrorBoundary extends Component<Props, State> {
               <p className="text-xs text-slate-500 leading-relaxed">
                 RetainNG encountered a temporary loading glitch. Don&apos;t worry, your data is safe!
               </p>
+              {this.state.error?.message && (
+                <p className="text-[10px] text-slate-400 font-mono bg-slate-50 border border-slate-200 p-1.5 rounded-lg max-w-xs mx-auto truncate">
+                  {this.state.error.message}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-2 pt-2">

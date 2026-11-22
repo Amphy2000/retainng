@@ -96,6 +96,13 @@ export default function DashboardPage() {
     return lapsedCustomers.reduce((acc, c) => acc + (c.total_spent_ngn || 6000), 0);
   }, [lapsedCustomers]);
 
+  // Repeat customer revenue (revenue generated from customers with 2+ visits)
+  const repeatRevenueNgn = useMemo(() => {
+    return customers
+      .filter((c) => (c.total_visits || 0) >= 2)
+      .reduce((acc, c) => acc + (Number(c.total_spent_ngn) || 0), 0);
+  }, [customers]);
+
   if (!mounted || !activeBusiness) {
     return (
       <div className="py-12 text-center text-slate-400 text-sm">
@@ -116,14 +123,6 @@ export default function DashboardPage() {
   const todayStr = new Date().toISOString().split('T')[0];
   const todaySales = sales.filter((s) => s.visit_date === todayStr);
   const todayRevenueNgn = todaySales.reduce((acc, s) => acc + (Number(s.amount_ngn) || 0), 0);
-
-
-  // Repeat customer revenue (revenue generated from customers with 2+ visits)
-  const repeatRevenueNgn = useMemo(() => {
-    return customers
-      .filter((c) => (c.total_visits || 0) >= 2)
-      .reduce((acc, c) => acc + (Number(c.total_spent_ngn) || 0), 0);
-  }, [customers]);
 
   // Repeat customers (customers with 2 or more recorded sales/visits)
   const repeatCustomers = customers.filter((c) => (c.total_visits || 0) >= 2).length;
