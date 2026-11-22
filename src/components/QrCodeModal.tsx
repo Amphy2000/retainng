@@ -20,6 +20,35 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
   const [optInUrl, setOptInUrl] = useState<string>('');
   const [showPrintCard, setShowPrintCard] = useState(initialShowPrintCard);
 
+  // Customizable Stand Card Incentive Hooks (Solves "What if business doesn't want to offer discounts")
+  const [incentiveType, setIncentiveType] = useState<'free_perk' | 'wifi' | 'vip' | 'discount' | 'receipt' | 'custom'>('free_perk');
+  const [customBadge, setCustomBadge] = useState('🎁 EXCLUSIVE CUSTOMER PERK');
+  const [customOfferText, setCustomOfferText] = useState('Scan with your phone camera to claim your Free Treatment Perk & priority booking!');
+
+  // Presets
+  function applyIncentivePreset(type: 'free_perk' | 'wifi' | 'vip' | 'discount' | 'receipt' | 'custom') {
+    setIncentiveType(type);
+    if (type === 'free_perk') {
+      setCustomBadge('🎁 EXCLUSIVE CUSTOMER PERK');
+      setCustomOfferText('Scan with phone to claim your Free Treatment Perk (Hair Wash, Beard Oil, or Tyre Shine)!');
+    } else if (type === 'wifi') {
+      setCustomBadge('📶 FREE HIGH-SPEED WI-FI');
+      setCustomOfferText('Scan with your phone to check in and unlock the High-Speed Shop Wi-Fi password!');
+    } else if (type === 'vip') {
+      setCustomBadge('⭐ VIP PRIORITY CLUB');
+      setCustomOfferText('Scan to join our VIP List for direct weekend appointment booking and birthday gifts!');
+    } else if (type === 'receipt') {
+      setCustomBadge('🧾 DIGITAL RECEIPT & CARE');
+      setCustomOfferText('Scan to save your digital receipt, service history, and expert aftercare instructions!');
+    } else if (type === 'discount') {
+      setCustomBadge('🏷️ RETURNING CLIENT DISCOUNT');
+      setCustomOfferText('Scan with your phone to get ₦500 OFF your next visit and direct appointment updates!');
+    } else {
+      setCustomBadge('✨ SPECIAL GUEST OFFER');
+      setCustomOfferText('Scan with phone camera to register your visit and receive appointment updates!');
+    }
+  }
+
   useEffect(() => {
     if (!isOpen) return;
     const timer = setTimeout(() => {
@@ -90,7 +119,48 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
 
         {/* Content */}
         {showPrintCard ? (
-          <div className="p-6 text-center space-y-4 overflow-y-auto">
+          <div className="p-5 text-center space-y-4 overflow-y-auto max-h-[80vh]">
+            {/* Customizable Incentive Hook Bar */}
+            <div className="text-left space-y-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block">
+                Choose Customer Hook (No discount required!):
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: 'free_perk', label: '🎁 Free Treatment Perk' },
+                  { id: 'wifi', label: '📶 Free Wi-Fi' },
+                  { id: 'vip', label: '⭐ VIP Priority' },
+                  { id: 'receipt', label: '🧾 Digital Receipt' },
+                  { id: 'discount', label: '🏷️ ₦500 Discount' },
+                  { id: 'custom', label: '✏️ Custom' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => applyIncentivePreset(item.id as 'free_perk' | 'wifi' | 'vip' | 'discount' | 'receipt' | 'custom')}
+                    className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition cursor-pointer ${
+                      incentiveType === item.id
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Input */}
+              <div className="pt-1">
+                <input
+                  type="text"
+                  value={customOfferText}
+                  onChange={(e) => setCustomOfferText(e.target.value)}
+                  placeholder="Custom offer or hook text..."
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                />
+              </div>
+            </div>
+
             {/* The Actual Printable Tent Card Canvas */}
             <div className="border-4 border-slate-900 rounded-3xl p-6 bg-white shadow-lg space-y-3 print:border-black print:m-0">
               <div className="w-10 h-10 rounded-xl bg-slate-900 text-white font-black text-lg flex items-center justify-center mx-auto">
@@ -101,11 +171,11 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
               </h2>
               <div className="py-1 px-3 bg-emerald-50 rounded-full inline-block border border-emerald-200">
                 <span className="text-xs font-bold text-emerald-800">
-                  ✨ ENJOYING YOUR SERVICE TODAY?
+                  {customBadge}
                 </span>
               </div>
-              <p className="text-xs text-slate-600 max-w-xs mx-auto font-medium">
-                Scan with your phone to get <strong className="text-slate-900">₦500 OFF</strong> your next visit and direct appointment updates!
+              <p className="text-xs text-slate-700 max-w-xs mx-auto font-medium leading-relaxed">
+                {customOfferText}
               </p>
 
               {/* QR Code */}

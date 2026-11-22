@@ -10,7 +10,7 @@ import { CustomerDetailModal } from './CustomerDetailModal';
 
 function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isPublicPage = pathname?.startsWith('/opt-in');
+  const isPublicPage = pathname?.startsWith('/opt-in') || pathname?.startsWith('/kiosk');
 
   const {
     refreshData,

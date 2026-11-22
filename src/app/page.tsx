@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { useIsMounted } from '@/lib/useMounted';
 import { OnboardingBanner } from '@/components/OnboardingBanner';
 import { DailyShiftModal } from '@/components/DailyShiftModal';
-import { formatNgn, formatDate, formatRelativeTime, getWhatsAppUrl } from '@/lib/utils';
+import { formatNgn, formatDate, formatRelativeTime, getWhatsAppUrl, parsePaymentAlert } from '@/lib/utils';
 import { recordSale } from '@/lib/storage';
 import {
   Users,
@@ -24,6 +24,7 @@ import {
   Clock,
   AlertTriangle,
   HeartHandshake,
+  Tablet,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -47,6 +48,27 @@ export default function DashboardPage() {
   const [quickAmount, setQuickAmount] = useState<number>(5000);
   const [quickCustomAmount, setQuickCustomAmount] = useState<string>('');
   const [quickSuccessMsg, setQuickSuccessMsg] = useState<string | null>(null);
+  const [quickAlertText, setQuickAlertText] = useState<string>('');
+
+  function handleQuickAlertPaste(text: string) {
+    setQuickAlertText(text);
+    const parsed = parsePaymentAlert(text);
+    if (parsed.amount) {
+      setQuickAmount(parsed.amount);
+      setQuickCustomAmount(String(parsed.amount));
+    }
+    if (parsed.name) {
+      const found = customers.find(
+        (c) =>
+          c.full_name.toLowerCase().includes(parsed.name!.toLowerCase()) ||
+          parsed.name!.toLowerCase().includes(c.full_name.toLowerCase())
+      );
+      if (found) {
+        setQuickCustomerId(found.id);
+        setQuickIsWalkin(false);
+      }
+    }
+  }
 
   // Filter lapsed customers (visited previously but not in last 25+ days)
   const lapsedCustomers = useMemo(() => {
@@ -246,10 +268,27 @@ export default function DashboardPage() {
 
         {/* Step 1: Customer Tap */}
         <div className="space-y-1.5 pt-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            1. Select Customer:
-          </span>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              1. Select Customer (Or Paste Bank Alert):
+            </span>
+            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">
+              ⚡ 0-Typing Mode
+            </span>
+          </div>
+
+          {/* Quick Paste Alert Input */}
+          <div>
+            <input
+              type="text"
+              placeholder="⚡ Paste Moniepoint / OPay transfer SMS (e.g. Credit: NGN 6,000 from Chidi Okafor...)"
+              value={quickAlertText}
+              onChange={(e) => handleQuickAlertPaste(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs rounded-xl border border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-emerald-50/40 font-medium placeholder:text-slate-400"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
             {/* Walk-in Button */}
             <button
               type="button"
@@ -595,9 +634,18 @@ export default function DashboardPage() {
               Let Customers Check In Themselves
             </h4>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Place your printed counter stand at the payment mirror or desk. Customers scan to get <strong className="text-emerald-400">₦500 OFF</strong>. Their phone number, visit, and marketing consent are logged automatically without staff lifting a finger!
+              Place your printed counter stand or a tablet at your payment desk. Customers scan or tap their phone number to check in. Their visit and marketing consent are logged automatically without staff lifting a finger!
             </p>
             <div className="pt-1 flex flex-col gap-2">
+              <Link
+                href={`/kiosk/${activeBusiness.opt_in_slug}`}
+                target="_blank"
+                className="w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 text-center"
+              >
+                <Tablet className="w-4 h-4 text-slate-950" />
+                <span>📱 Open Counter Tablet Mode</span>
+              </Link>
+
               <button
                 onClick={() => openQrModal(true)}
                 className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"

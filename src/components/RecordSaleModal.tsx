@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { Customer, Business } from '@/types';
 import { getCustomers, getActiveBusiness, recordSale } from '@/lib/storage';
-import { X, Check, Plus, Receipt, AlertCircle } from 'lucide-react';
+import { parsePaymentAlert } from '@/lib/utils';
+import { X, Check, Plus, Receipt, AlertCircle, Sparkles, ClipboardPaste } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -27,9 +28,34 @@ export function RecordSaleModal({ isOpen, onClose, onSuccess, preselectedCustome
   const [service, setService] = useState('');
   const [notes, setNotes] = useState('');
   const [visitDate, setVisitDate] = useState<string>('');
+  const [alertText, setAlertText] = useState('');
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function handleParseAlert(text: string) {
+    setAlertText(text);
+    const parsed = parsePaymentAlert(text);
+    if (parsed.amount) {
+      setAmount(String(parsed.amount));
+    }
+    if (parsed.name) {
+      const found = customers.find(
+        (c) =>
+          c.full_name.toLowerCase().includes(parsed.name!.toLowerCase()) ||
+          parsed.name!.toLowerCase().includes(c.full_name.toLowerCase())
+      );
+      if (found) {
+        setSelectedCustomerId(found.id);
+        setIsAddingNewCustomer(false);
+      } else {
+        setIsAddingNewCustomer(true);
+        setNewCustName(parsed.name);
+        setNewCustPhone('08000000000');
+        setGrantConsent(false);
+      }
+    }
+  }
 
   useEffect(() => {
     if (!isOpen) return;
@@ -159,6 +185,24 @@ export function RecordSaleModal({ isOpen, onClose, onSuccess, preselectedCustome
               <span>{error}</span>
             </div>
           )}
+
+          {/* Smart 1-Second Logger: Paste Bank Transfer / POS Alert */}
+          <div className="p-3 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-emerald-950 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                <span>⚡ Auto-Fill: Paste Moniepoint / OPay Transfer SMS</span>
+              </span>
+              <ClipboardPaste className="w-3.5 h-3.5 text-emerald-700" />
+            </div>
+            <input
+              type="text"
+              placeholder="Paste alert text (e.g. Credit: NGN 6,000 from Chidi Okafor...)"
+              value={alertText}
+              onChange={(e) => handleParseAlert(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs rounded-lg border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+            />
+          </div>
 
           {/* Quick Regulars Bar */}
           {customers.length > 0 && (
