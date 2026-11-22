@@ -19,6 +19,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
   const [copied, setCopied] = useState(false);
   const [optInUrl, setOptInUrl] = useState<string>('');
   const [showPrintCard, setShowPrintCard] = useState(initialShowPrintCard);
+  const [qrMode, setQrMode] = useState<'web' | 'whatsapp'>('web');
 
   // Customizable Stand Card Incentive Hooks (Solves "What if business doesn't want to offer discounts")
   const [incentiveType, setIncentiveType] = useState<'free_perk' | 'wifi' | 'vip' | 'discount' | 'receipt' | 'custom'>('free_perk');
@@ -57,11 +58,19 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
       setBusiness(biz);
 
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const fullUrl = `${origin}/opt-in/${biz.opt_in_slug}`;
-      setOptInUrl(fullUrl);
+      const webUrl = `${origin}/opt-in/${biz.opt_in_slug}`;
+
+      let finalUrl = webUrl;
+      if (qrMode === 'whatsapp') {
+        const digits = (biz.phone || '08000000000').replace(/\D/g, '');
+        const intlPhone = digits.startsWith('0') ? `234${digits.slice(1)}` : digits;
+        finalUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(`Hello ${biz.name}! I am at your shop and checking in today!`)}`;
+      }
+
+      setOptInUrl(finalUrl);
 
       QRCode.toDataURL(
-        fullUrl,
+        finalUrl,
         {
           width: 320,
           margin: 2,
@@ -78,7 +87,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
       );
     }, 0);
     return () => clearTimeout(timer);
-  }, [isOpen]);
+  }, [isOpen, qrMode, initialShowPrintCard]);
 
   if (!isOpen || !business) return null;
 
@@ -114,6 +123,32 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
             className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
           >
             <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Destination Mode Selector */}
+        <div className="bg-slate-100 p-2 flex items-center gap-1.5 border-b border-slate-200">
+          <button
+            type="button"
+            onClick={() => setQrMode('web')}
+            className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+              qrMode === 'web'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <span>🌐 Web Form Stand</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setQrMode('whatsapp')}
+            className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+              qrMode === 'whatsapp'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-emerald-700'
+            }`}
+          >
+            <span>💬 1-Tap WhatsApp Stand</span>
           </button>
         </div>
 

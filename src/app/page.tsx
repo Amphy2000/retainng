@@ -5,6 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { useIsMounted } from '@/lib/useMounted';
 import { OnboardingBanner } from '@/components/OnboardingBanner';
 import { DailyShiftModal } from '@/components/DailyShiftModal';
+import { CameraScannerModal } from '@/components/CameraScannerModal';
 import { formatNgn, formatDate, formatRelativeTime, getWhatsAppUrl, parsePaymentAlert } from '@/lib/utils';
 import { recordSale } from '@/lib/storage';
 import {
@@ -25,6 +26,7 @@ import {
   AlertTriangle,
   HeartHandshake,
   Tablet,
+  Camera,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -41,6 +43,7 @@ export default function DashboardPage() {
 
   const mounted = useIsMounted();
   const [isDailyShiftOpen, setIsDailyShiftOpen] = useState(false);
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
 
   // Quick 3-second check-in bar state (Grandma-simple)
   const [quickCustomerId, setQuickCustomerId] = useState<string>('');
@@ -320,6 +323,17 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
+            {/* Scan with Staff Camera Button (Zero Extra Hardware Needed) */}
+            <button
+              type="button"
+              onClick={() => setIsCameraScannerOpen(true)}
+              className="px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition flex items-center gap-1.5 cursor-pointer border bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+              title="Scan customer barcode or QR with phone camera"
+            >
+              <Camera className="w-3.5 h-3.5 text-emerald-700" />
+              <span>📷 Scan Barcode / QR</span>
+            </button>
+
             {/* Walk-in Button */}
             <button
               type="button"
@@ -838,6 +852,13 @@ export default function DashboardPage() {
       <DailyShiftModal
         isOpen={isDailyShiftOpen}
         onClose={() => setIsDailyShiftOpen(false)}
+      />
+
+      {/* Staff Camera / Barcode Scanner Modal */}
+      <CameraScannerModal
+        isOpen={isCameraScannerOpen}
+        onClose={() => setIsCameraScannerOpen(false)}
+        onSuccess={refreshData}
       />
     </div>
   );
