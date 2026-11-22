@@ -7,6 +7,7 @@ import { Navbar } from './Navbar';
 import { RecordSaleModal } from './RecordSaleModal';
 import { QrCodeModal } from './QrCodeModal';
 import { CustomerDetailModal } from './CustomerDetailModal';
+import { ErrorBoundary } from './ErrorBoundary';
 
 function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -69,10 +70,12 @@ function ShellInner({ children }: { children: React.ReactNode }) {
 
 export function ClientAppShell({ children }: { children: React.ReactNode }) {
   return (
-    <React.Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
-      <AppProvider>
-        <ShellInner>{children}</ShellInner>
-      </AppProvider>
-    </React.Suspense>
+    <ErrorBoundary>
+      <React.Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+        <AppProvider>
+          <ShellInner>{children}</ShellInner>
+        </AppProvider>
+      </React.Suspense>
+    </ErrorBoundary>
   );
 }

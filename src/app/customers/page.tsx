@@ -55,10 +55,10 @@ export default function CustomersPage() {
       const query = search.toLowerCase().trim();
       const matchSearch =
         !query ||
-        c.full_name.toLowerCase().includes(query) ||
-        c.phone.includes(query) ||
+        (c.full_name || '').toLowerCase().includes(query) ||
+        (c.phone || '').includes(query) ||
         (c.email && c.email.toLowerCase().includes(query)) ||
-        c.tags.some((t) => t.toLowerCase().includes(query));
+        (c.tags || []).some((t) => (t || '').toLowerCase().includes(query));
 
       // Consent filter
       const matchConsent = filterConsent === 'all' || c.consent_status === filterConsent;
@@ -278,7 +278,7 @@ export default function CustomersPage() {
                   onClick={() => openCustomerDetail(cust.id)}
                 >
                   <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center shrink-0 border border-slate-200 mt-0.5">
-                    {cust.full_name.charAt(0).toUpperCase()}
+                    {cust.full_name?.charAt(0)?.toUpperCase() || 'C'}
                   </div>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -327,8 +327,8 @@ export default function CustomersPage() {
                     {cust.consent_status === 'consented' && activeBusiness && (
                       <a
                         href={getWhatsAppUrl(
-                          cust.phone,
-                          `Hello ${cust.full_name.split(' ')[0]}! It's ${activeBusiness.name}. We'd love to see you again soon — reply to book your preferred slot this week!`
+                          cust.phone || '',
+                          `Hello ${cust.full_name ? cust.full_name.split(' ')[0] : 'Friend'}! It's ${activeBusiness.name}. We'd love to see you again soon — reply to book your preferred slot this week!`
                         )}
                         target="_blank"
                         rel="noopener noreferrer"

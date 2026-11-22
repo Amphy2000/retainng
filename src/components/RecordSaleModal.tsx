@@ -40,11 +40,11 @@ export function RecordSaleModal({ isOpen, onClose, onSuccess, preselectedCustome
       setAmount(String(parsed.amount));
     }
     if (parsed.name) {
-      const found = customers.find(
-        (c) =>
-          c.full_name.toLowerCase().includes(parsed.name!.toLowerCase()) ||
-          parsed.name!.toLowerCase().includes(c.full_name.toLowerCase())
-      );
+      const q = parsed.name.toLowerCase();
+      const found = customers.find((c) => {
+        const cName = (c.full_name || '').toLowerCase();
+        return cName.includes(q) || q.includes(cName);
+      });
       if (found) {
         setSelectedCustomerId(found.id);
         setIsAddingNewCustomer(false);
@@ -240,9 +240,9 @@ export function RecordSaleModal({ isOpen, onClose, onSuccess, preselectedCustome
                       }`}
                     >
                       <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-[10px] flex items-center justify-center font-bold">
-                        {cust.full_name.charAt(0)}
+                        {cust.full_name?.charAt(0) || 'C'}
                       </span>
-                      <span>{cust.full_name.split(' ')[0]}</span>
+                      <span>{cust.full_name?.split(' ')[0] || cust.full_name || 'Customer'}</span>
                     </button>
                   );
                 })}

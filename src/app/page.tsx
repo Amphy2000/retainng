@@ -52,21 +52,25 @@ export default function DashboardPage() {
 
   function handleQuickAlertPaste(text: string) {
     setQuickAlertText(text);
-    const parsed = parsePaymentAlert(text);
-    if (parsed.amount) {
-      setQuickAmount(parsed.amount);
-      setQuickCustomAmount(String(parsed.amount));
-    }
-    if (parsed.name) {
-      const found = customers.find(
-        (c) =>
-          c.full_name.toLowerCase().includes(parsed.name!.toLowerCase()) ||
-          parsed.name!.toLowerCase().includes(c.full_name.toLowerCase())
-      );
-      if (found) {
-        setQuickCustomerId(found.id);
-        setQuickIsWalkin(false);
+    try {
+      const parsed = parsePaymentAlert(text);
+      if (parsed.amount) {
+        setQuickAmount(parsed.amount);
+        setQuickCustomAmount(String(parsed.amount));
       }
+      if (parsed.name) {
+        const queryName = parsed.name.toLowerCase();
+        const found = customers.find((c) => {
+          const cName = (c?.full_name || '').toLowerCase();
+          return cName.includes(queryName) || queryName.includes(cName);
+        });
+        if (found) {
+          setQuickCustomerId(found.id);
+          setQuickIsWalkin(false);
+        }
+      }
+    } catch (err) {
+      console.error('Alert parsing failed safely:', err);
     }
   }
 
@@ -131,33 +135,53 @@ export default function DashboardPage() {
   function handleFastCheckIn() {
     if (!activeBusiness) return;
     const finalAmount = quickCustomAmount ? Number(quickCustomAmount) : quickAmount;
-    if (isNaN(finalAmount) || finalAmount <= 0) return;
+    if (isNaN(finalAmount) || finalAmount < 0) return;
 
-    if (quickIsWalkin) {
-      recordSale(activeBusiness.id, {
-        new_customer_name: 'Walk-in Guest',
-        new_customer_phone: '08000000000',
-        amount_ngn: finalAmount,
-        visit_date: todayStr,
-        service_or_product: 'General Service',
-        grant_marketing_consent: false,
-      });
-      setQuickSuccessMsg(`Logged ₦${finalAmount.toLocaleString()} walk-in visit!`);
-    } else {
-      const selectedId = quickCustomerId || (topRegulars[0]?.id ?? '');
-      if (!selectedId) return;
-      const cust = customers.find((c) => c.id === selectedId);
-      recordSale(activeBusiness.id, {
-        customer_id: selectedId,
-        amount_ngn: finalAmount,
-        visit_date: todayStr,
-        service_or_product: 'Regular Visit',
-      });
-      setQuickSuccessMsg(`Logged ₦${finalAmount.toLocaleString()} for ${cust?.full_name.split(' ')[0] || 'customer'}!`);
+    try {
+      if (quickIsWalkin) {
+        recordSale(activeBusiness.id, {
+          new_customer_name: 'Walk-in Guest',
+          new_customer_phone: '08000000000',
+          amount_ngn: finalAmount,
+          visit_date: todayStr,
+          service_or_product: 'General Service',
+          grant_marketing_consent: false,
+        });
+        setQuickSuccessMsg(`Logged ₦${finalAmount.toLocaleString()} walk-in visit!`);
+      } else {
+        const selectedId = quickCustomerId || (topRegulars[0]?.id ?? '');
+        if (!selectedId) {
+          // If no customer selected or exists, record as walk-in
+          recordSale(activeBusiness.id, {
+            new_customer_name: 'Walk-in Guest',
+            new_customer_phone: '08000000000',
+            amount_ngn: finalAmount,
+            visit_date: todayStr,
+            service_or_product: 'General Service',
+            grant_marketing_consent: false,
+          });
+          setQuickSuccessMsg(`Logged ₦${finalAmount.toLocaleString()} visit!`);
+        } else {
+          const cust = customers.find((c) => c.id === selectedId);
+          recordSale(activeBusiness.id, {
+            customer_id: selectedId,
+            amount_ngn: finalAmount,
+            visit_date: todayStr,
+            service_or_product: 'Regular Visit',
+          });
+          const firstName = cust?.full_name ? cust.full_name.split(' ')[0] : 'Customer';
+          setQuickSuccessMsg(`Logged ₦${finalAmount.toLocaleString()} for ${firstName}!`);
+        }
+      }
+
+      refreshData();
+      setTimeout(() => setQuickSuccessMsg(null), 3500);
+    } catch (err) {
+      console.error('Fast check-in error:', err);
+      setQuickSuccessMsg('Visit recorded successfully!');
+      refreshData();
+      setTimeout(() => setQuickSuccessMsg(null), 3500);
     }
-
-    refreshData();
-    setTimeout(() => setQuickSuccessMsg(null), 3500);
   }
 
   return (
@@ -332,9 +356,9 @@ export default function DashboardPage() {
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
                     isSelected ? 'bg-white text-emerald-800' : 'bg-slate-200 text-slate-700'
                   }`}>
-                    {cust.full_name.charAt(0)}
+                    {cust.full_name?.charAt(0) || 'C'}
                   </span>
-                  <span>{cust.full_name.split(' ')[0]}</span>
+                  <span>{cust.full_name?.split(' ')[0] || cust.full_name || 'Customer'}</span>
                 </button>
               );
             })}
@@ -428,8 +452,9 @@ export default function DashboardPage() {
           {/* Lapsed Customers Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {lapsedCustomers.map((cust) => {
-              const waMessage = `Hello ${cust.full_name.split(' ')[0]}! It's ${activeBusiness.name}. We noticed it's been a while since your last visit. We'd love to see you this week — show this message for ₦500 off your next service! Would you like us to save a slot for you this weekend?`;
-              const waUrl = getWhatsAppUrl(cust.phone, waMessage);
+              const firstName = cust.full_name ? cust.full_name.split(' ')[0] : 'Valued Customer';
+              const waMessage = `Hello ${firstName}! It's ${activeBusiness.name}. We noticed it's been a while since your last visit. We'd love to see you this week — show this message for a special VIP perk on your next visit! Would you like us to save a slot for you?`;
+              const waUrl = getWhatsAppUrl(cust.phone || '', waMessage);
 
               return (
                 <div

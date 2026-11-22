@@ -591,7 +591,7 @@ export function getEligibleRecipients(
   const excluded: CampaignPreviewItem[] = [];
 
   for (const c of candidates) {
-    const firstName = c.full_name.split(' ')[0] || c.full_name;
+    const firstName = c.full_name ? c.full_name.split(' ')[0] : (c.full_name || 'Customer');
     const personalized = messageTemplate
       .replace(/\{\{\s*name\s*\}\}/gi, firstName)
       .replace(/\{\{\s*business_name\s*\}\}/gi, business.name);

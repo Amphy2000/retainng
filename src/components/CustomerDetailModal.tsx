@@ -132,7 +132,7 @@ export function CustomerDetailModal({
         <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center text-base border border-emerald-500/30">
-              {customer.full_name.charAt(0).toUpperCase()}
+              {customer.full_name?.charAt(0)?.toUpperCase() || 'C'}
             </div>
             <div>
               <div className="flex items-center gap-2">
