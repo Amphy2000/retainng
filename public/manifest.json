@@ -1,0 +1,17 @@
+{
+  "name": "RetainNG - SME Customer Retention",
+  "short_name": "RetainNG",
+  "description": "Mobile-first customer retention engine for Nigerian barbershops, salons, laundries, and repeat businesses.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#059669",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}
