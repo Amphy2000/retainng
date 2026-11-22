@@ -109,7 +109,14 @@ export default function DashboardPage() {
   const todayStr = new Date().toISOString().split('T')[0];
   const todaySales = sales.filter((s) => s.visit_date === todayStr);
   const todayRevenueNgn = todaySales.reduce((acc, s) => acc + (Number(s.amount_ngn) || 0), 0);
-  const todayStaffCommission = Math.round(todayRevenueNgn * 0.4); // 40% standard split
+
+
+  // Repeat customer revenue (revenue generated from customers with 2+ visits)
+  const repeatRevenueNgn = useMemo(() => {
+    return customers
+      .filter((c) => (c.total_visits || 0) >= 2)
+      .reduce((acc, c) => acc + (Number(c.total_spent_ngn) || 0), 0);
+  }, [customers]);
 
   // Repeat customers (customers with 2 or more recorded sales/visits)
   const repeatCustomers = customers.filter((c) => (c.total_visits || 0) >= 2).length;
@@ -465,6 +472,72 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* 🚀 RETAINNG IMPACT & REVENUE ROI CARD */}
+      <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white rounded-2xl p-5 border border-slate-800 shadow-md">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center">
+                ₦
+              </span>
+              <h3 className="font-extrabold text-base text-white tracking-tight">
+                RetainNG Impact: Customer Value Delivered
+              </h3>
+              <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full">
+                Direct Business ROI
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-1 max-w-xl">
+              Real-time calculation of revenue generated from repeat customers who kept returning to your business.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-emerald-300 font-bold bg-emerald-950 border border-emerald-800 px-3 py-1.5 rounded-xl">
+              ⚡ {repeatRate}% Retention Rate (vs 22% Nigerian SME benchmark)
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
+          <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              Repeat Customer Revenue
+            </span>
+            <p className="text-2xl sm:text-3xl font-black text-emerald-400 mt-1">
+              {formatNgn(repeatRevenueNgn)}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              From {repeatCustomers} loyal regulars with 2+ visits
+            </p>
+          </div>
+
+          <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              At-Risk Revenue Protected
+            </span>
+            <p className="text-2xl sm:text-3xl font-black text-rose-400 mt-1">
+              {formatNgn(estimatedLostRevenue)}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              {lapsedCustomers.length} inactive regulars ready for WhatsApp recovery
+            </p>
+          </div>
+
+          <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              Customer Opt-In Base
+            </span>
+            <p className="text-2xl sm:text-3xl font-black text-amber-400 mt-1">
+              {consentedCustomers} Clients
+            </p>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              {consentedPct}% have agreed to receive special offers
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Metric Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Customers */}
@@ -664,12 +737,12 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Today's Shift & Staff Commission Tally */}
+          {/* Today's Shift Tally (Works for Salary & Commission) */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[10px] text-amber-700 font-bold uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                  Staff Motivation
+                  Staff Accountability
                 </span>
                 <h4 className="font-bold text-sm text-slate-900 mt-1">Today&apos;s Shift Tally</h4>
               </div>
@@ -677,7 +750,7 @@ export default function DashboardPage() {
                 onClick={() => setIsDailyShiftOpen(true)}
                 className="text-xs text-emerald-700 hover:underline font-semibold"
               >
-                Full split →
+                View ledger →
               </button>
             </div>
 
@@ -687,13 +760,13 @@ export default function DashboardPage() {
                 <p className="text-xl font-black text-slate-900 mt-0.5">{todaySales.length}</p>
               </div>
               <div>
-                <span className="text-[10px] text-slate-500 font-semibold">Staff Commission (40%)</span>
-                <p className="text-xl font-black text-amber-600 mt-0.5">{formatNgn(todayStaffCommission)}</p>
+                <span className="text-[10px] text-slate-500 font-semibold">Logged Volume</span>
+                <p className="text-xl font-black text-emerald-700 mt-0.5">{formatNgn(todayRevenueNgn)}</p>
               </div>
             </div>
 
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              💡 Staff eagerly record visits because their end-of-day commission is tracked transparently with zero disputes.
+              💡 Works for both fixed-salary teams and commission-split staff. Tap &quot;View ledger&quot; to review or export today&apos;s shift count.
             </p>
           </div>
 

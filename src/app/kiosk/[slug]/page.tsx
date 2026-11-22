@@ -26,6 +26,19 @@ function KioskContent() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [promptNewName, setPromptNewName] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
+  const [selectedService, setSelectedService] = useState<string>('');
+
+  // Service chips based on business type
+  const serviceOptions =
+    business?.business_type === 'barber'
+      ? ['Haircut & Beard', 'VIP Grooming', 'Home Service', 'Products']
+      : business?.business_type === 'salon'
+      ? ['Braids & Weave', 'Nails & Pedicure', 'Wash & Blowdry', 'Wig Install']
+      : business?.business_type === 'laundry'
+      ? ['Dry Cleaning', 'Wash & Fold', 'Native Ironing', 'Bedding']
+      : business?.business_type === 'car_wash'
+      ? ['Full Exterior Wash', 'Interior Steam', 'Engine Wash', 'VIP Detail']
+      : ['General Visit', 'Prescription / Items', 'Product Purchase', 'Consultation'];
 
   // Status message
   const [successData, setSuccessData] = useState<{
@@ -92,12 +105,13 @@ function KioskContent() {
     const todayStr = new Date().toISOString().split('T')[0];
 
     if (existing) {
-      // Existing customer - instant check in!
+      // Existing customer - record visit with 0 amount (to be billed at counter or kept as visit check-in)
       recordSale(business.id, {
         customer_id: existing.id,
-        amount_ngn: 5000, // standard nominal visit record
+        amount_ngn: 0,
         visit_date: todayStr,
-        service_or_product: 'Counter Kiosk Check-In',
+        service_or_product: selectedService || 'Self Check-In',
+        notes: 'Checked in via counter kiosk (Awaiting checkout bill)',
       });
 
       setSuccessData({
@@ -109,6 +123,7 @@ function KioskContent() {
       setTimeout(() => {
         setSuccessData(null);
         setPhoneNumber('');
+        setSelectedService('');
       }, 3500);
     } else {
       // New customer - prompt for name
@@ -130,9 +145,10 @@ function KioskContent() {
 
     recordSale(business.id, {
       customer_id: newCust.id,
-      amount_ngn: 5000,
+      amount_ngn: 0,
       visit_date: todayStr,
-      service_or_product: 'Counter Kiosk Check-In',
+      service_or_product: selectedService || 'Self Check-In',
+      notes: 'New guest registered via counter kiosk',
     });
 
     setSuccessData({
@@ -146,6 +162,7 @@ function KioskContent() {
     setTimeout(() => {
       setSuccessData(null);
       setPhoneNumber('');
+      setSelectedService('');
     }, 3500);
   }
 
