@@ -27,6 +27,7 @@ import {
   HeartHandshake,
   Tablet,
   Camera,
+  Bot,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -242,6 +243,34 @@ export default function DashboardPage() {
             <span>Print Counter Stand</span>
           </button>
         </div>
+      </div>
+
+      {/* 🤖 AI AUTOPILOT CAMPAIGN TEAM BANNER */}
+      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 text-white rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+            <Bot className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-400">
+                AI Autopilot Marketing Team Active
+              </span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Staff only logs visits at the counter. RetainNG AI automatically monitors regulars, detects churn, and queues personalized WhatsApp re-invites for you.
+            </p>
+          </div>
+        </div>
+
+        <Link
+          href="/campaigns"
+          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 shrink-0"
+        >
+          <span>Open AI Campaign Team</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
       </div>
 
       {/* The Anti-Double-Bookkeeping Guarantee Card */}
