@@ -25,9 +25,9 @@ const conversationState: Record<
 > = {};
 
 // --- Green-API config ---
-const GREEN_API_ID = process.env.GREEN_API_ID_INSTANCE || '710722811499';
+const GREEN_API_ID = process.env.GREEN_API_ID_INSTANCE || '710722811593';
 const GREEN_API_TOKEN =
-  process.env.GREEN_API_TOKEN || '98d11063fda64174ae6c50d0401bb2f0569f7f45a0ad49e3ac';
+  process.env.GREEN_API_TOKEN || 'c7cea54f5c6f4d31a9b74eb6576493a8ec085b4f65a04a62b5';
 const GREEN_API_URL = process.env.GREEN_API_URL || 'https://7107.api.greenapi.com';
 
 /** Look up manager phone for any slug — reads from /api/pharmacy-config (no env vars needed) */
@@ -215,7 +215,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Block self-messages (bot's own outbound triggers)
-    if (cleanPhone === '2349169153129') {
+    if (cleanPhone === '2347032673310' || cleanPhone === '2349169153129') {
       return NextResponse.json({ ignored: 'self-message' });
     }
 

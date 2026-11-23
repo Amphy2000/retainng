@@ -36,7 +36,7 @@ export default function SettingsPage() {
   // WhatsApp Fleet & Routing configuration
   const [whatsappRoutingMode, setWhatsappRoutingMode] = useState<WhatsAppRoutingMode>('agency_concierge');
   const [managerAlertPhone, setManagerAlertPhone] = useState('');
-  const [conciergePhone, setConciergePhone] = useState('+234 803 200 2026');
+  const [conciergePhone, setConciergePhone] = useState('+234 703 267 3310');
 
   const [isSaved, setIsSaved] = useState(false);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
@@ -57,7 +57,7 @@ export default function SettingsPage() {
 
       setWhatsappRoutingMode(activeBusiness.whatsapp_routing_mode || 'agency_concierge');
       setManagerAlertPhone(activeBusiness.manager_alert_phone || activeBusiness.phone || '');
-      setConciergePhone(activeBusiness.concierge_phone || '+234 803 200 2026');
+      setConciergePhone(activeBusiness.concierge_phone || '+234 703 267 3310');
     }, 0);
     return () => clearTimeout(timer);
   }, [activeBusiness]);

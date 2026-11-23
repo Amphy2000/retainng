@@ -26,7 +26,7 @@ const pharmacyConfig: Record<
   'apex-pharmacy': {
     pharmacyName: 'Apex Health & Community Pharmacy',
     managerPhone: '', // Set via Settings page
-    conciergePhone: '+234 916 915 3129',
+    conciergePhone: '+234 703 267 3310',
   },
 };
 
