@@ -57,6 +57,8 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
       const biz = getActiveBusiness();
       setBusiness(biz);
 
+      if (!biz) return; // Guard: no active business yet
+
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
       const webUrl = `${origin}/opt-in/${biz.opt_in_slug}`;
 

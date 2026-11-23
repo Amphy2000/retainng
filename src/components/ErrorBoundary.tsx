@@ -29,15 +29,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   handleResetState = () => {
     try {
-      // Clear localStorage if data was corrupted
+      // Clear ALL RetainNG localStorage keys to fix corrupted state
       if (typeof window !== 'undefined') {
-        const keysToClean = [
-          'kudi_retention_customers',
-          'kudi_retention_sales',
-          'kudi_retention_businesses',
-          'kudi_retention_active_biz_id',
-        ];
-        keysToClean.forEach((k) => localStorage.removeItem(k));
+        const allKeys = Object.keys(localStorage).filter((k) =>
+          k.startsWith('kudi_retention') || k.startsWith('retainng')
+        );
+        allKeys.forEach((k) => localStorage.removeItem(k));
         window.location.reload();
       }
     } catch {

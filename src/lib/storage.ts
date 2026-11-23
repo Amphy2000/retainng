@@ -28,7 +28,11 @@ const STORAGE_KEYS = {
   CONSENT_RECORDS: 'kudi_retention_consent_records',
   CAMPAIGNS: 'kudi_retention_campaigns',
   ONBOARDING: 'kudi_retention_onboarding',
+  SCHEMA_VERSION: 'kudi_retention_schema_v',
 };
+
+// Bump this whenever the data shape changes in a breaking way
+const CURRENT_SCHEMA_VERSION = '5';
 
 // Safe localStorage access helper
 function getStored<T>(key: string, fallback: T): T {
@@ -55,23 +59,38 @@ function setStored<T>(key: string, value: T): void {
 export function initLocalStorage(): void {
   if (typeof window === 'undefined') return;
 
-  if (!localStorage.getItem(STORAGE_KEYS.BUSINESSES)) {
-    setStored(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.ACTIVE_BIZ_ID)) {
-    setStored(STORAGE_KEYS.ACTIVE_BIZ_ID, INITIAL_BUSINESSES[0].id);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.CUSTOMERS)) {
-    setStored(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.SALES)) {
-    setStored(STORAGE_KEYS.SALES, INITIAL_SALES);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.CONSENT_RECORDS)) {
-    setStored(STORAGE_KEYS.CONSENT_RECORDS, INITIAL_CONSENT_RECORDS);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.CAMPAIGNS)) {
-    setStored(STORAGE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS);
+  try {
+    // Schema version check — wipe stale data from old app versions
+    const storedVersion = localStorage.getItem(STORAGE_KEYS.SCHEMA_VERSION);
+    if (storedVersion !== CURRENT_SCHEMA_VERSION) {
+      // Clear all RetainNG keys so fresh seed data loads cleanly
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('kudi_retention') || k.startsWith('retainng'))
+        .forEach((k) => localStorage.removeItem(k));
+      localStorage.setItem(STORAGE_KEYS.SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);
+    }
+
+    if (!localStorage.getItem(STORAGE_KEYS.BUSINESSES)) {
+      setStored(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.ACTIVE_BIZ_ID)) {
+      setStored(STORAGE_KEYS.ACTIVE_BIZ_ID, INITIAL_BUSINESSES[0].id);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.CUSTOMERS)) {
+      setStored(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.SALES)) {
+      setStored(STORAGE_KEYS.SALES, INITIAL_SALES);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.CONSENT_RECORDS)) {
+      setStored(STORAGE_KEYS.CONSENT_RECORDS, INITIAL_CONSENT_RECORDS);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.CAMPAIGNS)) {
+      setStored(STORAGE_KEYS.CAMPAIGNS, INITIAL_CAMPAIGNS);
+    }
+  } catch (e) {
+    // If localStorage is completely broken, silently continue with in-memory fallbacks
+    console.error('initLocalStorage failed:', e);
   }
 }
 

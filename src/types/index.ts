@@ -5,6 +5,8 @@ export type BusinessType =
   | 'car_wash'
   | 'boutique'
   | 'spa_wellness'
+  | 'pharmacy'
+  | 'clinic'
   | 'other';
 
 export type ConsentStatus = 'consented' | 'unconfirmed' | 'opted_out';
