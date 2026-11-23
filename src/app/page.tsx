@@ -139,35 +139,27 @@ export default function AgencyRadarPage() {
         </div>
       </div>
 
-      {/* ━━ 2. FILTER STORE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center gap-2">
-        <span className="text-xs font-bold text-slate-500 flex items-center gap-1 mr-1">
-          <Building2 className="w-3.5 h-3.5 text-emerald-600" />
-          Store Scope:
-        </span>
-        <button
-          onClick={() => setSelectedBiz('all')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-            selectedBiz === 'all'
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-          }`}
-        >
-          All Stores (Fleet Total)
-        </button>
-        {allBusinesses.map((b) => (
-          <button
-            key={b.id}
-            onClick={() => setSelectedBiz(b.id)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-              selectedBiz === b.id
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-            }`}
+      {/* ━━ 2. FILTER STORE (CLEAN DROPDOWN FOR SCALE) ━━━━━━━━━━━━━━ */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-emerald-600" />
+          <span className="text-xs font-bold text-slate-800">Viewing Partner:</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedBiz}
+            onChange={(e) => setSelectedBiz(e.target.value)}
+            className="text-xs font-bold px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full sm:w-64 cursor-pointer"
           >
-            {b.name}
-          </button>
-        ))}
+            <option value="all">🌍 All Stores (Agency Fleet Total)</option>
+            {allBusinesses.map((b) => (
+              <option key={b.id} value={b.id}>
+                {BIZ_ICONS[b.business_type] || '🏪'} {b.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* ━━ 3. THE 3 NUMBERS THAT PROVE YOUR VALUE ━━━━━━━━━━━━━━━━━━━━━ */}
