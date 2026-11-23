@@ -6,7 +6,6 @@ import { getBusinessBySlug, getCustomers, getSales, recordSale } from '@/lib/sto
 import { Business, Customer, SaleOrVisit } from '@/types';
 import { QrCodeModal } from '@/components/QrCodeModal';
 import { formatNgn, formatRelativeTime } from '@/lib/utils';
-import Link from 'next/link';
 import {
   Sparkles,
   CheckCircle2,
@@ -176,10 +175,7 @@ function PortalInner() {
         <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center max-w-sm">
           <Store className="w-10 h-10 text-slate-400 mx-auto mb-2" />
           <h2 className="text-base font-bold text-slate-800">Business Not Found</h2>
-          <p className="text-xs text-slate-500 mt-1">Please check your store link.</p>
-          <Link href="/" className="mt-4 inline-block px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl">
-            Return to Agency HQ
-          </Link>
+          <p className="text-xs text-slate-500 mt-1">Please verify your store portal link.</p>
         </div>
       </div>
     );
@@ -205,12 +201,12 @@ function PortalInner() {
             </div>
           </div>
 
-          <Link
-            href="/"
-            className="text-[11px] font-semibold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg border border-slate-700 transition"
-          >
-            Agency HQ
-          </Link>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+              Connected
+            </span>
+          </div>
         </div>
       </header>
 
