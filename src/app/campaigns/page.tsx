@@ -10,6 +10,7 @@ import {
   saveCampaignDraft,
   getBusinesses,
   getCustomers,
+  recordSale,
 } from '@/lib/storage';
 import { CampaignDraft, Business, Customer } from '@/types';
 import { ConsentBadge } from '@/components/ConsentBadge';
@@ -66,7 +67,8 @@ function CampaignContent() {
   const searchParams = useSearchParams();
   const initialSegment = searchParams.get('segment') || 'inactive_30d';
 
-  const { activeBusiness, customers } = useApp();
+  const { activeBusiness, customers, refreshData } = useApp();
+  const [refreshTick, setRefreshTick] = useState(0);
 
   const [activeTab, setActiveTab] = useState<'autopilot' | 'editor' | 'history'>('autopilot');
   const [isAutopilotEnabled, setIsAutopilotEnabled] = useState(true);
@@ -223,7 +225,7 @@ function CampaignContent() {
     }
 
     return items;
-  }, [fleetScope, businesses, aiTone]);
+  }, [fleetScope, businesses, aiTone, refreshTick]);
 
   // Total potential revenue currently queued by AI
   const aiTotalQueuedValue = useMemo(() => {
@@ -261,6 +263,19 @@ function CampaignContent() {
 
     setIsSimulatedSent(true);
     setCampaigns(getCampaignDrafts(activeBusiness.id));
+  }
+
+  function handleMarkRefilled(bizId: string, customer: Customer) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    recordSale(bizId, {
+      customer_id: customer.id,
+      amount_ngn: 0,
+      visit_date: todayStr,
+      service_or_product: customer.tags?.[0] || 'Refill Completed',
+      notes: 'Refill completed & adherence cycle reset',
+    });
+    refreshData();
+    setRefreshTick((t) => t + 1);
   }
 
   return (
@@ -673,16 +688,25 @@ function CampaignContent() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       <a
                         href={item.waUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
                       >
-                        <MessageCircle className="w-4 h-4" />
-                        <span>Send WhatsApp Now</span>
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>Send WhatsApp</span>
                       </a>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkRefilled(item.bizId, item.customer)}
+                        className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-emerald-400 font-bold text-xs rounded-xl border border-slate-700 hover:border-emerald-500/50 flex items-center justify-center gap-1 transition cursor-pointer shadow-xs"
+                        title="Customer picked up drugs or confirmed order. Reset adherence clock to today."
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Reset 28 Days</span>
+                      </button>
                     </div>
                   </div>
                 ))}
