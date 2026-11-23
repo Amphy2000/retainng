@@ -77,7 +77,7 @@ export function Navbar({ onOpenRecordModal, onOpenQrModal, onBusinessChanged }: 
 
   const agencyNavItems = [
     { label: 'Agency Radar', href: '/', icon: LayoutDashboard },
-    { label: 'Clients & Bag Slips', href: '/customers', icon: Users },
+    { label: 'Clients & Touchpoints', href: '/customers', icon: Users },
     { label: 'Settings', href: '/settings', icon: Settings },
   ];
 
