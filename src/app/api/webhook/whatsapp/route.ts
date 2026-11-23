@@ -292,13 +292,14 @@ export async function POST(req: NextRequest) {
       await sendWhatsApp(cleanPhone, reply);
 
       // Alert the manager about the new patient onboarded!
+      // (Only send if manager's phone is DIFFERENT from the patient's phone)
       const managerPhone = await getManagerPhone(activeSlug, host);
-      if (managerPhone) {
+      if (managerPhone && managerPhone !== cleanPhone) {
         const onboardAlert =
-          `🎉 *NEW PATIENT LINKED — ${bizDisplay}*\n\n` +
+          `🚨 *NEW PATIENT LINKED — ${bizDisplay}*\n\n` +
           `👤 *Patient:* ${profileName || 'Customer'} (WhatsApp: ...${cleanPhone.slice(-4)})\n` +
-          `📱 *Phone:* ${cleanPhone}\n` +
-          `✅ Linked to ${bizDisplay} via Prescription Bag Slip QR.\n` +
+          `📱 *Phone:* +${cleanPhone}\n` +
+          `✅ Linked via Prescription Bag Slip QR.\n` +
           `⏱️ Next refill reminder clock started.`;
 
         await sendWhatsApp(managerPhone, onboardAlert);
@@ -392,7 +393,7 @@ ORDER_DETECTED: [item name]`;
     // Send manager dispatch alert for refill orders
     if (isOrder) {
       const managerPhone = await getManagerPhone(activeSlug, host);
-      if (managerPhone) {
+      if (managerPhone && managerPhone !== cleanPhone) {
         const targetStore = activeBizName || 'RetainNG Partner Store';
         const managerAlert =
           `🚨 *NEW REFILL / SERVICE ORDER — ${targetStore}*\n\n` +
