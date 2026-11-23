@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>RetainNG Master Avatar</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 1024px;
+      height: 1024px;
+      overflow: hidden;
+      background: #060911;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .canvas-container {
+      position: relative;
+      width: 1024px;
+      height: 1024px;
+      background: radial-gradient(circle at 50% 45%, #0d281e 0%, #081613 35%, #050a0e 70%, #030508 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Ambient Outer Glow */
+    .ambient-glow {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.22) 0%, rgba(20, 184, 166, 0.08) 45%, transparent 70%);
+      filter: blur(50px);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    /* Outer Geometric Precision Ring */
+    .outer-ring {
+      position: absolute;
+      width: 760px;
+      height: 760px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(16, 185, 129, 0.18);
+      box-shadow: inset 0 0 40px rgba(16, 185, 129, 0.05);
+    }
+
+    .dashed-ring {
+      position: absolute;
+      width: 820px;
+      height: 820px;
+      border-radius: 50%;
+      border: 1px dashed rgba(20, 184, 166, 0.12);
+    }
+
+    .svg-emblem {
+      position: relative;
+      z-index: 10;
+      width: 640px;
+      height: 640px;
+      filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 35px rgba(16, 185, 129, 0.3));
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas-container">
+    <div class="ambient-glow"></div>
+    <div class="dashed-ring"></div>
+    <div class="outer-ring"></div>
+
+    <svg class="svg-emblem" viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- Gradients -->
+        <linearGradient id="bgGrad" x1="50" y1="50" x2="550" y2="550" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#0f291e" />
+          <stop offset="100%" stop-color="#07130e" />
+        </linearGradient>
+
+        <linearGradient id="primaryNeon" x1="100" y1="120" x2="480" y2="480" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#34D399" />
+          <stop offset="45%" stop-color="#10B981" />
+          <stop offset="100%" stop-color="#059669" />
+        </linearGradient>
+
+        <linearGradient id="cyanAccent" x1="220" y1="100" x2="500" y2="380" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#2DD4BF" />
+          <stop offset="50%" stop-color="#06B6D4" />
+          <stop offset="100%" stop-color="#0284C7" />
+        </linearGradient>
+
+        <linearGradient id="platinumBevel" x1="150" y1="100" x2="450" y2="500" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.8" />
+          <stop offset="50%" stop-color="#A7F3D0" stop-opacity="0.2" />
+          <stop offset="100%" stop-color="#064E3B" stop-opacity="0.1" />
+        </linearGradient>
+
+        <linearGradient id="glowG" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#10B981" />
+          <stop offset="100%" stop-color="#06B6D4" />
+        </linearGradient>
+
+        <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#34D399" />
+          <stop offset="60%" stop-color="#10B981" />
+          <stop offset="100%" stop-color="#059669" stop-opacity="0" />
+        </radialGradient>
+
+        <!-- Filters -->
+        <filter id="neonBlur" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="8" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+
+        <filter id="deepShadow" x="-20%" y="-20%" width="150%" height="150%">
+          <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000000" flood-opacity="0.8" />
+          <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#10B981" flood-opacity="0.35" />
+        </filter>
+      </defs>
+
+      <!-- Glassmorphic Shield/Disc Base -->
+      <circle cx="300" cy="300" r="260" fill="url(#bgGrad)" stroke="rgba(52, 211, 153, 0.3)" stroke-width="3" filter="url(#deepShadow)" />
+      
+      <!-- Inner Precision Concentric Circles -->
+      <circle cx="300" cy="300" r="236" stroke="rgba(255, 255, 255, 0.05)" stroke-width="1.5" />
+      <circle cx="300" cy="300" r="228" stroke="rgba(16, 185, 129, 0.12)" stroke-width="1" stroke-dasharray="8 6" />
+
+      <!-- THE MASTER "R" RETENTION EMBLEM -->
+      <!-- Left Vertical Spine of 'R' with rounded caps & metallic sheen -->
+      <g filter="url(#neonBlur)">
+        <!-- Vertical Column -->
+        <path d="M 185 140 
+                 L 245 140 
+                 C 250 140 254 144 254 149
+                 L 254 445 
+                 C 254 453 247 460 239 460
+                 L 190 460
+                 C 182 460 176 453 176 445
+                 L 176 149
+                 C 176 144 180 140 185 140 Z" 
+              fill="url(#primaryNeon)" />
+
+        <!-- Vertical Spine Inner Highlight -->
+        <path d="M 186 148 L 196 148 L 196 450 L 186 450 Z" 
+              fill="#FFFFFF" fill-opacity="0.45" />
+
+        <!-- Top Loop of 'R' (Continuous Retention Arc) -->
+        <path d="M 235 140 
+                 L 345 140 
+                 C 410 140 455 178 455 242 
+                 C 455 305 408 344 340 344 
+                 L 235 344 
+                 Z" 
+              fill="url(#cyanAccent)" 
+              fill-opacity="0.95" />
+
+        <!-- Top Loop Inner Cutout (Pill/Vessel geometry) -->
+        <path d="M 254 200 
+                 L 335 200 
+                 C 368 200 392 216 392 242 
+                 C 392 268 368 284 335 284 
+                 L 254 284 
+                 Z" 
+              fill="#06120D" stroke="rgba(52, 211, 153, 0.3)" stroke-width="2" />
+
+        <!-- Dynamic Retention Kick/Leg of 'R' sweeping forward into an infinite upward growth curve -->
+        <path d="M 310 325 
+                 L 380 325
+                 C 395 325 408 333 416 345
+                 L 472 436 
+                 C 479 448 471 460 457 460 
+                 L 398 460 
+                 C 388 460 378 454 372 444 
+                 L 326 372 
+                 C 320 363 313 358 300 358 
+                 L 254 358 
+                 L 254 325 
+                 Z" 
+              fill="url(#primaryNeon)" />
+
+        <!-- Connected Retention Orbit Swarm (Health Dot & Orbit) -->
+        <path d="M 455 242 C 485 242 510 267 510 298 C 510 330 484 354 445 354" 
+              stroke="url(#primaryNeon)" stroke-width="8" stroke-linecap="round" stroke-dasharray="1 12" />
+
+        <!-- Clinical Plus / Health Badge Node -->
+        <circle cx="445" cy="180" r="26" fill="#091E16" stroke="#34D399" stroke-width="3" filter="url(#deepShadow)" />
+        <path d="M 445 168 L 445 192 M 433 180 L 457 180" stroke="#34D399" stroke-width="4.5" stroke-linecap="round" />
+
+        <!-- Glowing Active Retention Node on Leg -->
+        <circle cx="465" cy="450" r="7" fill="#34D399" />
+        <circle cx="465" cy="450" r="16" fill="url(#nodeGlow)" />
+      </g>
+
+      <!-- Gloss Surface Reflection (Bevel) -->
+      <path d="M 176 160 C 220 145 340 142 420 185 C 380 180 260 180 176 210 Z" 
+            fill="url(#platinumBevel)" />
+    </svg>
+  </div>
+</body>
+</html>
