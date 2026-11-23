@@ -26,6 +26,7 @@ function OptInFormContent() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [agreed, setAgreed] = useState(true); // checked by default on self-registration form, but with explicit disclosure
 
   const [submitted, setSubmitted] = useState(false);
@@ -95,6 +96,7 @@ function OptInFormContent() {
         phone: phone.trim(),
         email: email.trim() || undefined,
         agreed_to_marketing: agreed,
+        visit_category: selectedCategory || undefined,
       });
 
       if (res.success) {
@@ -108,6 +110,38 @@ function OptInFormContent() {
       setIsSubmitting(false);
     }
   }
+
+  const isPharmacy =
+    business.business_type?.toLowerCase().includes('pharm') ||
+    business.name.toLowerCase().includes('pharm') ||
+    business.business_type?.toLowerCase().includes('chemist') ||
+    business.business_type?.toLowerCase().includes('health');
+
+  const isGrooming =
+    business.business_type?.toLowerCase().includes('barber') ||
+    business.business_type?.toLowerCase().includes('hair') ||
+    business.business_type?.toLowerCase().includes('salon') ||
+    business.business_type?.toLowerCase().includes('spa');
+
+  const categoryOptions = isPharmacy
+    ? [
+        { id: 'Refill (Chronic/Routine)', label: '💊 Monthly Refill', desc: 'BP, Diabetes, Routine Rx' },
+        { id: 'Acute Care (Prescription)', label: '🌡️ Acute Care', desc: 'Malaria, Antibiotics, Pain' },
+        { id: 'Family & OTC', label: '👶 Family & OTC', desc: 'Vitamins, Baby, Daily Health' },
+        { id: 'Home Delivery / Pick-up', label: '🛵 Home Delivery', desc: 'Discreet door delivery' },
+      ]
+    : isGrooming
+    ? [
+        { id: 'Haircut & Shave', label: '✂️ Haircut & Shave', desc: 'Sharp regular cut' },
+        { id: 'Fade & Styling', label: '💈 Fade & Lineup', desc: 'Beard grooming & fade' },
+        { id: 'VIP Grooming & Spa', label: '💆 VIP Grooming', desc: 'Facial, Scrub & Steam' },
+        { id: 'Home Service', label: '🛵 Home Service', desc: 'VIP house visit' },
+      ]
+    : [
+        { id: 'Regular Service', label: '⭐ Regular Service', desc: 'Standard service visit' },
+        { id: 'Product Purchase', label: '🛍️ Counter Order', desc: 'Item or supplies purchase' },
+        { id: 'Consultation', label: '💬 Consultation', desc: 'Expert consultation' },
+      ];
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col justify-between p-4 sm:p-6 text-slate-100 selection:bg-emerald-500 selection:text-white">
@@ -148,6 +182,12 @@ function OptInFormContent() {
                 <p className="text-xs text-slate-500 mt-1.5 leading-relaxed max-w-xs mx-auto">
                   Thank you, <strong className="text-slate-800">{fullName}</strong>. Your details and visit preferences have been saved with <strong className="text-slate-800">{business.name}</strong>.
                 </p>
+                {selectedCategory && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold mt-2">
+                    <span>Priority:</span>
+                    <span className="font-bold">{selectedCategory}</span>
+                  </div>
+                )}
               </div>
 
               <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 text-left text-xs text-emerald-900 space-y-1">
@@ -156,7 +196,7 @@ function OptInFormContent() {
                   <span>Verified Consent Record</span>
                 </p>
                 <p className="text-[11px] leading-relaxed text-emerald-800">
-                  We logged your permission for appointment notices and specials. You can reply STOP or ask counter staff anytime to opt out.
+                  We logged your permission for care notices and specials. You can reply STOP or ask counter staff anytime to opt out.
                 </p>
               </div>
 
@@ -166,6 +206,7 @@ function OptInFormContent() {
                   setFullName('');
                   setPhone('');
                   setEmail('');
+                  setSelectedCategory('');
                 }}
                 className="w-full py-3 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
               >
@@ -237,6 +278,38 @@ function OptInFormContent() {
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
+                </div>
+              </div>
+
+              {/* 1-Tap Visit Category Selector */}
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1.5 flex items-center justify-between">
+                  <span>{isPharmacy ? 'Primary Care / Visit Category' : 'Service Type (Optional)'}</span>
+                  <span className="text-[10px] text-slate-400 font-normal">1-tap selection</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {categoryOptions.map((opt) => {
+                    const active = selectedCategory === opt.id;
+                    return (
+                      <button
+                        type="button"
+                        key={opt.id}
+                        onClick={() => setSelectedCategory(active ? '' : opt.id)}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          active
+                            ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20'
+                            : 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <p className={`text-xs font-bold leading-tight ${active ? 'text-emerald-800' : 'text-slate-800'}`}>
+                          {opt.label}
+                        </p>
+                        <p className={`text-[10px] mt-0.5 line-clamp-1 ${active ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {opt.desc}
+                        </p>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

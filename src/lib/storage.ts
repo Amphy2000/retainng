@@ -383,6 +383,24 @@ export function recordSale(
 
   allSales.unshift(newSale);
   setStored(STORAGE_KEYS.SALES, allSales);
+
+  // Auto-tag customer with the service/visit type if provided
+  if (customerId && params.service_or_product) {
+    const rawCustomers = getStored<Customer[]>(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
+    const cIdx = rawCustomers.findIndex((c) => c.id === customerId);
+    if (cIdx !== -1) {
+      const curTags = rawCustomers[cIdx].tags || [];
+      if (!curTags.includes(params.service_or_product)) {
+        rawCustomers[cIdx] = {
+          ...rawCustomers[cIdx],
+          tags: [params.service_or_product, ...curTags],
+          updated_at: new Date().toISOString(),
+        };
+        setStored(STORAGE_KEYS.CUSTOMERS, rawCustomers);
+      }
+    }
+  }
+
   return newSale;
 }
 
@@ -774,6 +792,7 @@ export function registerCustomerOptIn(
     phone: string;
     email?: string;
     agreed_to_marketing: boolean;
+    visit_category?: string;
   }
 ): { success: boolean; message: string; customerId?: string } {
   const business = getBusinessBySlug(slug);
@@ -790,10 +809,12 @@ export function registerCustomerOptIn(
 
   const allCustomers = getStored<Customer[]>(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
   const allConsents = getStored<CustomerConsentRecord[]>(STORAGE_KEYS.CONSENT_RECORDS, INITIAL_CONSENT_RECORDS);
+  const allSales = getStored<SaleOrVisit[]>(STORAGE_KEYS.SALES, INITIAL_SALES);
   const now = new Date().toISOString();
 
   const cleanPhone = data.phone.trim();
   const cleanName = data.full_name.trim();
+  const categoryTag = data.visit_category?.trim();
 
   // Find if already exists
   const existingIdx = allCustomers.findIndex(
@@ -804,10 +825,16 @@ export function registerCustomerOptIn(
 
   if (existingIdx !== -1) {
     custId = allCustomers[existingIdx].id;
+    const currentTags = allCustomers[existingIdx].tags || [];
+    const updatedTags = categoryTag && !currentTags.includes(categoryTag)
+      ? [categoryTag, ...currentTags]
+      : currentTags;
+
     allCustomers[existingIdx] = {
       ...allCustomers[existingIdx],
       full_name: cleanName,
       email: data.email?.trim() || allCustomers[existingIdx].email,
+      tags: updatedTags,
       consent_status: 'consented',
       consent_source: 'qr_optin',
       consent_date: now,
@@ -815,14 +842,19 @@ export function registerCustomerOptIn(
     };
   } else {
     custId = `cust_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const initialTags = ['Self-Registered', 'Opt-In'];
+    if (categoryTag) {
+      initialTags.unshift(categoryTag);
+    }
+
     allCustomers.push({
       id: custId,
       business_id: business.id,
       full_name: cleanName,
       phone: cleanPhone,
       email: data.email?.trim() || undefined,
-      tags: ['Self-Registered', 'Opt-In'],
-      notes: 'Customer signed up via QR code or public link.',
+      tags: initialTags,
+      notes: categoryTag ? `Visit Category: ${categoryTag}. Registered via counter QR code.` : 'Customer signed up via QR code or public link.',
       consent_status: 'consented',
       consent_source: 'qr_optin',
       consent_date: now,
@@ -831,18 +863,35 @@ export function registerCustomerOptIn(
     });
   }
 
+  // Record initial counter visit so customer has an active visit date
+  const newVisit: SaleOrVisit = {
+    id: `sale_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    business_id: business.id,
+    customer_id: custId,
+    customer_name: cleanName,
+    customer_phone: cleanPhone,
+    amount_ngn: 0,
+    visit_date: now.split('T')[0],
+    service_or_product: categoryTag || 'Counter Self Check-in',
+    notes: 'Registered and checked in via Counter QR Stand',
+    is_manual_entry: false,
+    created_at: now,
+  };
+  allSales.unshift(newVisit);
+
   allConsents.push({
     id: `cons_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     business_id: business.id,
     customer_id: custId,
     status: 'consented',
     source: 'qr_optin',
-    notes: `Customer signed up directly on web form/QR with explicit checkbox checked.`,
+    notes: `Customer signed up directly on web form/QR with explicit checkbox checked. Category: ${categoryTag || 'General'}`,
     created_at: now,
   });
 
   setStored(STORAGE_KEYS.CUSTOMERS, allCustomers);
   setStored(STORAGE_KEYS.CONSENT_RECORDS, allConsents);
+  setStored(STORAGE_KEYS.SALES, allSales);
 
   return { success: true, message: `Thank you, ${cleanName}! You're registered with ${business.name}.`, customerId: custId };
 }
