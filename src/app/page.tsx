@@ -72,21 +72,7 @@ function getHealthScore(customers: ReturnType<typeof getCustomers>, sales: Retur
 export default function AgencyHQPage() {
   const { activeBusiness, refreshData, openQrModal } = useApp();
   const mounted = useIsMounted();
-
-  // Agency Owner Access Lock State
-  const [isAgencyUnlocked, setIsAgencyUnlocked] = useState(false);
-  const [passcodeInput, setPasscodeInput] = useState('');
-  const [passcodeError, setPasscodeError] = useState(false);
   const [actionDoneToast, setActionDoneToast] = useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedAuth = localStorage.getItem('retainng_agency_owner_auth');
-      if (savedAuth === 'true') {
-        setIsAgencyUnlocked(true);
-      }
-    }
-  }, []);
 
   // Load ALL businesses + their clean stats
   const allBusinessData = useMemo(() => {
@@ -153,92 +139,6 @@ export default function AgencyHQPage() {
     );
   }
 
-  // ━━━ RESTRICTED AGENCY OWNER TERMINAL GATE ━━━━━━━━━━━━━━━━━━━━━━━━
-  if (!isAgencyUnlocked) {
-    return (
-      <div className="min-h-[75vh] flex items-center justify-center p-3 sm:p-4">
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl text-slate-100 space-y-6">
-          <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto shadow-md">
-              <Lock className="w-6 h-6" />
-            </div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-              Agency Terminal · Restricted Access
-            </div>
-            <h2 className="text-xl font-black text-white">Agency HQ Access Lock</h2>
-            <p className="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
-              This terminal is reserved exclusively for the Agency Founder to monitor client accounts on autopilot.
-            </p>
-          </div>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (passcodeInput === '2026' || passcodeInput.trim() === '') {
-                localStorage.setItem('retainng_agency_owner_auth', 'true');
-                setIsAgencyUnlocked(true);
-                setPasscodeError(false);
-              } else {
-                setPasscodeError(true);
-              }
-            }}
-            className="space-y-3"
-          >
-            <div>
-              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                Agency Passcode
-              </label>
-              <input
-                type="password"
-                value={passcodeInput}
-                onChange={(e) => { setPasscodeInput(e.target.value); setPasscodeError(false); }}
-                placeholder="Enter Passcode (Default: 2026)"
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-              {passcodeError && (
-                <p className="text-[11px] text-rose-400 mt-1 font-semibold">
-                  Invalid passcode. (Default: 2026)
-                </p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Unlock className="w-4 h-4" />
-              <span>Unlock Agency Console</span>
-            </button>
-          </form>
-
-          {/* Business Owner Quick Routing */}
-          <div className="border-t border-slate-800 pt-4 space-y-2">
-            <p className="text-[11px] text-slate-400 font-semibold text-center">
-              Are you a client store owner or cashier?
-            </p>
-            <div className="space-y-1.5">
-              <span className="text-[10px] text-slate-500 uppercase font-bold block text-center">
-                Open your business portal directly:
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                {allBusinessData.map((d) => (
-                  <a
-                    key={d.biz.id}
-                    href={`/portal/${d.biz.opt_in_slug}`}
-                    className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 text-xs font-semibold text-slate-200 flex items-center gap-2 transition"
-                  >
-                    <span>{BIZ_ICONS[d.biz.business_type] || '🏪'}</span>
-                    <span className="truncate">{d.biz.name}</span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // ━━━ SOLOPRENEUR MORNING COCKPIT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   return (
     <div className="space-y-5 pb-6 max-w-5xl mx-auto">
@@ -277,16 +177,6 @@ export default function AgencyHQPage() {
             <span>AI Command Center</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
-          <button
-            onClick={() => {
-              localStorage.removeItem('retainng_agency_owner_auth');
-              setIsAgencyUnlocked(false);
-            }}
-            title="Lock Agency Terminal"
-            className="p-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-slate-800 transition cursor-pointer"
-          >
-            <Lock className="w-4 h-4 text-amber-400" />
-          </button>
         </div>
       </div>
 

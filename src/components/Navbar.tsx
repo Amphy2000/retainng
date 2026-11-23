@@ -77,9 +77,8 @@ export function Navbar({ onOpenRecordModal, onOpenQrModal, onBusinessChanged }: 
 
   const agencyNavItems = [
     { label: 'Agency HQ', href: '/', icon: LayoutDashboard },
-    { label: 'AI Center', href: '/campaigns', icon: Bot },
+    { label: 'AI Autopilot', href: '/campaigns', icon: Bot },
     { label: 'Customers', href: '/customers', icon: Users },
-    { label: 'Segments', href: '/segments', icon: PieChart },
     { label: 'Analytics', href: '/sales', icon: BarChart2 },
     { label: 'Settings', href: '/settings', icon: Settings },
   ];
@@ -87,9 +86,9 @@ export function Navbar({ onOpenRecordModal, onOpenQrModal, onBusinessChanged }: 
   const mobileBottomNav = [
     { label: 'HQ', href: '/', icon: LayoutDashboard },
     { label: 'AI', href: '/campaigns', icon: Bot },
-    { label: 'Clients', href: '/customers', icon: Users },
+    { label: 'Customers', href: '/customers', icon: Users },
     { label: 'Analytics', href: '/sales', icon: BarChart2 },
-    { label: 'More', href: '/settings', icon: Settings },
+    { label: 'Settings', href: '/settings', icon: Settings },
   ];
 
   return (
