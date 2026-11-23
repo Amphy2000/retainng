@@ -225,98 +225,56 @@ export async function POST(req: NextRequest) {
 
     // --- Pharmacy reference detection (first scan) ---
     const refMatch = messageBody.match(/\[ref:([a-zA-Z0-9_-]+)\]/i);
-    const incomingSlug = refMatch ? refMatch[1] : null;
+    const incomingSlug = refMatch ? refMatch[1] : 'apex-pharmacy';
 
-    let state = conversationState[cleanPhone];
-
-    // =========================================================
-    // CASE 1: FIRST-TIME SCAN — bind patient to pharmacy
-    // =========================================================
-    if (incomingSlug) {
-      conversationState[cleanPhone] = {
-        slug: incomingSlug,
-        name: profileName || '',
-        lastIntent: 'onboard',
-        pendingMedication: '',
-        pendingDelivery: '',
-        awaitingName: !profileName,
-      };
-      state = conversationState[cleanPhone];
-
+    // If first-time scan with [ref:...]
+    if (refMatch) {
       const greeting = profileName ? ` ${profileName}` : '';
-      const nameAsk = !profileName
-        ? `\n\nMay I have your name so our pharmacist addresses you properly? (Just reply with your name, e.g. _Alhaji Musa_ or _Mama Chichi_)\n`
-        : '\n';
-
       const reply =
         `🎉 *Welcome${greeting} to Apex Health & Community Pharmacy Care Concierge!*\n\n` +
-        `Your number (*...${cleanPhone.slice(-4)}*) is now linked to this pharmacy. ` +
-        `You will *never need to scan or type a code again.*${nameAsk}\n` +
-        `Whenever your medication runs low, just say so here naturally — e.g. _"My BP drugs have finished"_ — ` +
-        `and our pharmacist will get it ready for you! 💊\n\n` +
+        `Your phone number (*...${cleanPhone.slice(-4)}*) is now linked to our pharmacy. ` +
+        `You will *never need to scan or type a code again.* 💊\n\n` +
+        `Whenever your medication runs low, just message us here naturally — e.g. _"My BP drugs have finished"_ — ` +
+        `and our pharmacist will get it ready for pickup or home delivery!\n\n` +
         `How can we support your health today?`;
 
       await sendWhatsApp(cleanPhone, reply);
       return NextResponse.json({ success: true, intent: 'onboard', phone: cleanPhone });
     }
 
-    // =========================================================
-    // CASE 2: RETURNING PATIENT — awaiting name input
-    // =========================================================
-    if (state?.awaitingName && messageBody.trim().length > 1 && messageBody.trim().length < 50) {
-      state.name = messageBody.trim();
-      state.awaitingName = false;
-
+    // If user replied "1" to select pharmacy
+    if (messageBody.trim() === '1') {
+      const greeting = profileName ? ` ${profileName}` : '';
       const reply =
-        `✅ *Wonderful, ${state.name}!* We have saved your name.\n\n` +
-        `Whenever your medication runs low, just message us here naturally and we'll prepare your order. ` +
-        `You can also ask our pharmacist any health question.\n\n` +
-        `How can we help you today? 💊`;
+        `🎉 *Welcome${greeting} to Apex Health & Community Pharmacy!*\n\n` +
+        `You are now connected with our care team. Whenever your medications run low, ` +
+        `just send a message here (e.g. _"Refill my BP drugs"_ or send your prescription name) ` +
+        `and we will prepare it for you! 💊\n\n` +
+        `What medication can we help you with today?`;
 
       await sendWhatsApp(cleanPhone, reply);
-      return NextResponse.json({ success: true, intent: 'name_saved', name: state.name });
+      return NextResponse.json({ success: true, intent: 'pharmacy_selected' });
     }
 
     // =========================================================
-    // CASE 3: UNKNOWN PATIENT — never scanned a QR
+    // ALL CONVERSATIONS — Powered by Gemini 2.5 Flash
     // =========================================================
-    if (!state) {
-      const reply =
-        `👋 *Hello! Welcome to Retain Health Concierge.*\n\n` +
-        `It seems you are reaching us directly. No problem!\n\n` +
-        `Which pharmacy are you registered with?\n` +
-        `• Reply *1* for Apex Health & Community Pharmacy\n\n` +
-        `Or ask your pharmacist to give you a free QR code card for instant setup.`;
+    const displayName = profileName || `Customer (...${cleanPhone.slice(-4)})`;
 
-      await sendWhatsApp(cleanPhone, reply);
-      return NextResponse.json({ success: true, intent: 'unknown_patient' });
-    }
-
-    // =========================================================
-    // CASE 4: KNOWN PATIENT — run Gemini AI intent detection
-    // =========================================================
-    const displayName = state.name || profileName || `Patient (...${cleanPhone.slice(-4)})`;
-
-    const systemPrompt = `You are a friendly, smart WhatsApp pharmacy concierge bot for a Nigerian community pharmacy called Apex Health & Community Pharmacy.
-
+    const systemPrompt = `You are a warm, highly competent AI pharmacy concierge for Apex Health & Community Pharmacy in Nigeria.
 The patient messaging you is named: ${displayName}
-Their phone: ...${cleanPhone.slice(-4)}
+Their phone ending in: ...${cleanPhone.slice(-4)}
 
-Your job is to:
-1. Detect their intent from their message (even if they wrote with typos, in Pidgin English, or incomplete sentences)
-2. Respond warmly and helpfully in simple Nigerian English
-3. If they want a refill or medication order: confirm the medication name, ask if they want pickup or home delivery
-4. If they give a delivery address: acknowledge it and tell them the pharmacist will call to confirm
-5. If they ask a pharmacist question: give a brief, accurate, safe answer and suggest they confirm with their pharmacist
-6. NEVER give the same generic menu again - actually respond to what they said
-7. Keep replies under 150 words, friendly, and practical
+Your guidelines:
+1. Respond helpfully, warmly, and concisely in simple Nigerian English (using friendly expressions when appropriate).
+2. If they mention BP, diabetes, refill, running out of drugs, or specific medications (e.g. Amlodipine, Metformin, Coartem): acknowledge their refill warmly and ask if they prefer home delivery or store pickup.
+3. If they provide a delivery address: confirm the address warmly and let them know the pharmacist is packaging it and will call them to confirm dispatch.
+4. If they ask clinical/dosage questions: give a clear, safe, accurate brief answer and invite them to speak with the pharmacist if needed.
+5. NEVER repeat menus or say "reply 1 for this, reply 2 for that". Be human, conversational, empathetic, and attentive.
+6. Keep replies concise (under 80 words).
 
-Previous intent: ${state.lastIntent}
-Pending medication: ${state.pendingMedication || 'none'}
-Pending delivery address: ${state.pendingDelivery || 'none'}
-
-Important: If the patient is ordering medication, end your reply with this exact line on a new line:
-ORDER_DETECTED: [medication name] | [delivery preference]`;
+Important: If the patient is ordering or refilling medication, append this exact tag at the very end of your response on its own line:
+ORDER_DETECTED: [medication name]`;
 
     let aiReply = '';
     let isOrder = false;
@@ -325,15 +283,11 @@ ORDER_DETECTED: [medication name] | [delivery preference]`;
     try {
       const rawAiReply = await callGeminiAI(systemPrompt, messageBody);
 
-      // Check if AI flagged an order
       if (rawAiReply.includes('ORDER_DETECTED:')) {
         const lines = rawAiReply.split('\n');
         const orderLine = lines.find((l) => l.startsWith('ORDER_DETECTED:'));
         if (orderLine) {
-          const orderData = orderLine.replace('ORDER_DETECTED:', '').trim();
-          const parts = orderData.split('|');
-          detectedMed = parts[0]?.trim() || messageBody;
-          state.pendingMedication = detectedMed;
+          detectedMed = orderLine.replace('ORDER_DETECTED:', '').trim() || messageBody;
           isOrder = true;
         }
         aiReply = lines
@@ -344,50 +298,39 @@ ORDER_DETECTED: [medication name] | [delivery preference]`;
         aiReply = rawAiReply;
       }
     } catch {
-      // Fallback to keyword detection
+      // Fallback if AI service is temporarily unavailable
       const kwResult = detectIntentKeywords(messageBody);
       if (kwResult.startsWith('INTENT:REFILL')) {
         detectedMed = messageBody.trim();
-        state.pendingMedication = detectedMed;
         isOrder = true;
         aiReply =
-          `Got it ${displayName}! 💊 We've received your medication refill request.\n\n` +
-          `*Order:* ${detectedMed}\n\n` +
-          `Would you like *pickup* at the pharmacy or *home delivery*? ` +
-          `If delivery, please send your address.`;
+          `Got it ${displayName}! 💊 We have received your medication refill request for *${detectedMed}*.\n\n` +
+          `Would you like to pick it up at the pharmacy or have it delivered to your address?`;
       } else if (kwResult.startsWith('INTENT:DELIVERY')) {
-        state.pendingDelivery = messageBody.trim();
+        isOrder = true;
         aiReply =
           `📍 Perfect! We have noted your delivery address:\n*${messageBody.trim()}*\n\n` +
-          `Your pharmacist will call you shortly to confirm the order and arrange delivery.`;
-        isOrder = true; // alert manager
-        detectedMed = state.pendingMedication || 'Monthly refill';
+          `Our dispensary team will call you shortly to confirm and dispatch your medications.`;
       } else {
         aiReply =
           `Hello ${displayName}! 👋 How can we help you today?\n\n` +
-          `• Say *"Refill my [medication]"* to order a refill\n` +
-          `• Ask any health or dosage question\n` +
-          `• Say *"Deliver to [your address]"* for home delivery\n\n` +
-          `_Your care team is ready._`;
+          `Feel free to tell us what medications you need refilled, or ask any question about your dosage or health. We're here for you! 💊`;
       }
     }
 
-    state.lastIntent = isOrder ? 'refill_order' : 'conversation';
-
-    // Send reply to patient
+    // Send the human, AI-generated reply to the patient
     await sendWhatsApp(cleanPhone, aiReply);
 
     // Send manager dispatch alert for refill orders
     if (isOrder) {
-      const managerPhone = await getManagerPhone(state.slug, host);
+      const managerPhone = await getManagerPhone(incomingSlug, host);
       if (managerPhone) {
         const managerAlert =
           `🚨 *NEW REFILL ORDER — Apex Health & Community Pharmacy*\n\n` +
           `👤 *Patient:* ${displayName} (WhatsApp: ...${cleanPhone.slice(-4)})\n` +
-          `💊 *Order:* ${detectedMed}\n` +
-          `📍 *Delivery:* ${state.pendingDelivery || 'Pickup at store (patient to confirm)'}\n\n` +
-          `✅ Refill clock has been reset for 28 days.\n` +
-          `📞 Please call patient to confirm and dispatch.`;
+          `💊 *Order / Request:* ${detectedMed || messageBody}\n` +
+          `⏱️ *Status:* 28-day refill clock reset.\n` +
+          `📞 Please check with dispensary & call patient to confirm.`;
 
         await sendWhatsApp(managerPhone, managerAlert);
       }
@@ -397,7 +340,6 @@ ORDER_DETECTED: [medication name] | [delivery preference]`;
       success: true,
       phone: cleanPhone,
       name: displayName,
-      intent: state.lastIntent,
       order_detected: isOrder,
       reply: aiReply,
     });
