@@ -61,6 +61,7 @@ async function callGeminiAI(
   userMessage: string
 ): Promise<string> {
   const geminiApiKey = process.env.GEMINI_API_KEY || '';
+
   if (!geminiApiKey) {
     // Fallback: simple keyword intent detection without AI
     return detectIntentKeywords(userMessage);
@@ -72,18 +73,23 @@ async function callGeminiAI(
     generationConfig: { temperature: 0.4, maxOutputTokens: 400 },
   };
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }
-  );
-  const data = await res.json();
-  return (
-    data?.candidates?.[0]?.content?.parts?.[0]?.text || detectIntentKeywords(userMessage)
-  );
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }
+    );
+    const data = await res.json();
+    return (
+      data?.candidates?.[0]?.content?.parts?.[0]?.text || detectIntentKeywords(userMessage)
+    );
+  } catch (err) {
+    console.error('Gemini API call error:', err);
+    return detectIntentKeywords(userMessage);
+  }
 }
 
 function detectIntentKeywords(msg: string): string {
