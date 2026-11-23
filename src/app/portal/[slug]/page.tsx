@@ -2,25 +2,15 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useParams } from 'next/navigation';
-import { getBusinessBySlug, getCustomers, getSales, recordSale } from '@/lib/storage';
+import { getBusinessBySlug, getCustomers, getSales } from '@/lib/storage';
 import { Business, Customer, SaleOrVisit } from '@/types';
 import { QrCodeModal } from '@/components/QrCodeModal';
 import { formatNgn, formatRelativeTime } from '@/lib/utils';
 import {
-  Sparkles,
-  CheckCircle2,
-  Phone,
-  User,
-  Store,
   Printer,
   QrCode,
-  Zap,
-  TrendingUp,
-  Clock,
-  ArrowRight,
-  ShieldCheck,
   Bot,
-  Plus,
+  ExternalLink,
 } from 'lucide-react';
 
 const BIZ_ICONS: Record<string, string> = {
@@ -35,21 +25,6 @@ const BIZ_ICONS: Record<string, string> = {
   other: '🏪',
 };
 
-const BIZ_SERVICES: Record<string, string[]> = {
-  barber: ['Haircut & Beard', 'Fade Cut', 'VIP Grooming', 'Home Service'],
-  salon: ['Braids & Weave', 'Wig Install', 'Wash & Blowdry', 'Nails & Pedicure'],
-  laundry: ['Dry Cleaning', 'Wash & Fold', 'Native Attire', 'Bedding / Duvet'],
-  car_wash: ['Exterior Wash', 'Interior Steam', 'Engine Polish', 'Full VIP Detail'],
-  pharmacy: [
-    '💊 Monthly Refill (BP, Diabetes, Routine)',
-    '🌡️ Acute Care (Malaria, Antibiotics, Pain)',
-    '👶 Family & OTC (Vitamins, Baby, First Aid)',
-    '🛵 Home Delivery Order',
-  ],
-  clinic: ['Doctor Consult', 'Routine Checkup', 'Lab Test', 'Follow-up Visit'],
-  other: ['Standard Service', 'Product Purchase', 'VIP Package', 'Consultation'],
-};
-
 function PortalInner() {
   const params = useParams();
   const slug = params?.slug as string;
@@ -58,13 +33,6 @@ function PortalInner() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [sales, setSales] = useState<SaleOrVisit[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Check-in input states
-  const [custInput, setCustInput] = useState('');
-  const [phoneInput, setPhoneInput] = useState('');
-  const [selectedService, setSelectedService] = useState('');
-  const [isNewCust, setIsNewCust] = useState(false);
-  const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // QR Modal
   const [qrOpen, setQrOpen] = useState(false);
@@ -102,104 +70,25 @@ function PortalInner() {
     const avgTicket = business?.business_type === 'pharmacy' ? 12000 : business?.business_type === 'barber' ? 6000 : 8000;
     const estimatedValue = recoveredCount * avgTicket;
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayVisits = sales.filter(s => s.visit_date === todayStr);
+    return { totalCusts, activeCusts, recoveredCount, estimatedValue };
+  }, [customers, business]);
 
-    return { totalCusts, activeCusts, recoveredCount, estimatedValue, todayVisitsCount: todayVisits.length };
-  }, [customers, sales, business]);
-
-  const serviceChips = BIZ_SERVICES[business?.business_type || 'other'] || BIZ_SERVICES.other;
-  const recentVisits = sales.slice(0, 5);
-
-  function handleInstantPatientCheckin(patient: Customer, defaultService?: string) {
-    if (!business) return;
-    const todayStr = new Date().toISOString().split('T')[0];
-    const service = defaultService || patient.tags?.[0] || 'Regular Visit';
-    try {
-      recordSale(business.id, {
-        customer_id: patient.id,
-        amount_ngn: 0,
-        visit_date: todayStr,
-        service_or_product: service,
-      });
-      setSuccessToast(`✓ ${patient.full_name} checked in! (${service})`);
-      reloadData(business.id);
-      setTimeout(() => setSuccessToast(null), 4000);
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  function handleQuickCheckin() {
-    if (!business) return;
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    try {
-      if (isNewCust) {
-        if (!custInput.trim() || !phoneInput.trim()) {
-          alert('Please enter both name and phone number for the new customer');
-          return;
-        }
-        recordSale(business.id, {
-          new_customer_name: custInput.trim(),
-          new_customer_phone: phoneInput.trim(),
-          amount_ngn: 0, // No price required!
-          visit_date: todayStr,
-          service_or_product: selectedService || 'Regular Visit',
-          grant_marketing_consent: true,
-        });
-        setSuccessToast(`✓ New customer ${custInput.trim()} checked in!`);
-      } else {
-        const found = customers.find(c => c.id === custInput || c.full_name?.toLowerCase() === custInput.toLowerCase());
-        if (found) {
-          recordSale(business.id, {
-            customer_id: found.id,
-            amount_ngn: 0,
-            visit_date: todayStr,
-            service_or_product: selectedService || 'Regular Visit',
-          });
-          setSuccessToast(`✓ ${found.full_name.split(' ')[0]} checked in!`);
-        } else {
-          // Walk-in checkin
-          recordSale(business.id, {
-            new_customer_name: custInput.trim() || 'Walk-in Guest',
-            new_customer_phone: phoneInput.trim() || '08000000000',
-            amount_ngn: 0,
-            visit_date: todayStr,
-            service_or_product: selectedService || 'Walk-in Visit',
-            grant_marketing_consent: false,
-          });
-          setSuccessToast(`✓ Visit recorded!`);
-        }
-      }
-
-      reloadData(business.id);
-      setCustInput('');
-      setPhoneInput('');
-      setSelectedService('');
-      setIsNewCust(false);
-      setTimeout(() => setSuccessToast(null), 4000);
-    } catch (err) {
-      console.error(err);
-      alert('Could not record visit');
-    }
-  }
+  const recentVisits = sales.slice(0, 6);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="text-slate-400 text-sm">Loading Store Portal...</div>
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400 text-xs">
+        Loading RetainNG Portal...
       </div>
     );
   }
 
   if (!business) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center max-w-sm">
-          <Store className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-          <h2 className="text-base font-bold text-slate-800">Business Not Found</h2>
-          <p className="text-xs text-slate-500 mt-1">Please verify your store portal link.</p>
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="bg-slate-800 rounded-2xl p-6 text-center text-white max-w-sm space-y-3">
+          <p className="text-sm font-bold">Business not found</p>
+          <p className="text-xs text-slate-400">Could not find a store with slug &quot;{slug}&quot;</p>
         </div>
       </div>
     );
@@ -208,25 +97,27 @@ function PortalInner() {
   const icon = BIZ_ICONS[business.business_type] || '🏪';
 
   return (
-    <div className="min-h-screen bg-slate-100/80 text-slate-900 pb-12">
-      {/* ━━━ OWNER TOP BAR ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      <header className="bg-slate-950 text-white border-b border-slate-800 px-4 py-3.5 sticky top-0 z-20 shadow-md">
-        <div className="max-w-xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">{icon}</span>
-            <div>
-              <div className="font-extrabold text-sm text-white tracking-tight leading-tight">{business.name}</div>
+    <div className="min-h-screen bg-slate-100 font-sans text-slate-900 pb-12">
+      {/* ━━━ TOP CLIENT BRAND HEADER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <header className="bg-slate-950 text-white border-b border-slate-800 px-4 py-3 sticky top-0 z-20 shadow-md">
+        <div className="max-w-xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-xl shrink-0">{icon}</span>
+            <div className="min-w-0">
+              <h1 className="font-black text-sm text-white truncate leading-tight">
+                {business.name}
+              </h1>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
                   RetainNG AI Autopilot
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
               Connected
             </span>
@@ -235,156 +126,6 @@ function PortalInner() {
       </header>
 
       <main className="max-w-xl mx-auto px-4 py-5 space-y-4">
-
-        {/* Success Alert */}
-        {successToast && (
-          <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-lg flex items-center gap-2 text-xs font-black animate-in fade-in slide-in-from-top-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>{successToast}</span>
-          </div>
-        )}
-
-        {/* ━━━ GRANDMA-SIMPLE CHECK-IN CARD ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-md p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center justify-center">
-                <Zap className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-base font-black text-slate-900 leading-none">Quick Customer Check-in</h2>
-                <p className="text-[11px] text-slate-500 mt-0.5">Takes 2 seconds • Zero price/POS entry needed</p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setIsNewCust(!isNewCust)}
-              className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition"
-            >
-              {isNewCust ? 'Select Regular' : '+ New Customer'}
-            </button>
-          </div>
-
-          {!isNewCust ? (
-            <div className="space-y-3">
-              {/* ⚡ 1-Tap Instant Check-In Buttons */}
-              {customers.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1">
-                      <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                      <span>1-Tap Instant Check-in (0.5s)</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400">Click name to check in</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {customers.slice(0, 4).map((c) => {
-                      const tag = c.tags?.[0] || 'Regular Visit';
-                      const last4 = c.phone ? c.phone.replace(/\D/g, '').slice(-4) : '';
-                      return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => handleInstantPatientCheckin(c)}
-                          className="p-2.5 rounded-2xl bg-slate-50 hover:bg-emerald-50 active:bg-emerald-100 border border-slate-200 hover:border-emerald-400 text-left transition group cursor-pointer shadow-2xs"
-                        >
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-xs font-black text-slate-900 group-hover:text-emerald-900 truncate">
-                              {c.full_name}
-                            </span>
-                            {last4 && (
-                              <span className="text-[10px] font-mono font-bold text-slate-400 group-hover:text-emerald-700 shrink-0">
-                                ...{last4}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-slate-500 group-hover:text-emerald-700 truncate mt-0.5 font-medium flex items-center justify-between">
-                            <span>{tag}</span>
-                            <span className="text-[9px] text-slate-400">{c.phone}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-1">
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
-                  Or Look Up Another Customer
-                </label>
-                <select
-                  value={custInput}
-                  onChange={(e) => setCustInput(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-2xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="">-- Choose Customer or Walk-in --</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.full_name} ({c.phone})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl animate-in fade-in">
-              <div className="text-xs font-bold text-slate-800">Add New Customer (Saved Forever)</div>
-              <div>
-                <label className="text-[10px] text-slate-500 font-semibold uppercase block mb-1">Customer Full Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Babajide Adeleke"
-                  value={custInput}
-                  onChange={(e) => setCustInput(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-slate-500 font-semibold uppercase block mb-1">WhatsApp Phone Number</label>
-                <input
-                  type="tel"
-                  placeholder="e.g. 0802 345 6789"
-                  value={phoneInput}
-                  onChange={(e) => setPhoneInput(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Quick Service Tags (Optional) */}
-          <div>
-            <label className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider block mb-1.5">
-              Service / Reason (Optional)
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {serviceChips.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSelectedService(selectedService === s ? '' : s)}
-                  className={`px-2.5 py-1 text-xs rounded-lg font-semibold transition cursor-pointer ${
-                    selectedService === s
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Big Green Check-in CTA */}
-          <button
-            onClick={handleQuickCheckin}
-            className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-2xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-          >
-            <CheckCircle2 className="w-5 h-5" />
-            <span>Check In Customer</span>
-          </button>
-        </div>
-
         {/* ━━━ RETENTION CONCIERGE & BAG SLIPS HUB ━━━━━━━━━━━━━━━━━━━ */}
         <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-3xl p-6 border border-slate-800 shadow-xl space-y-4">
           <div className="flex items-center justify-between">
@@ -403,7 +144,7 @@ function PortalInner() {
           </div>
 
           <p className="text-xs text-slate-300 leading-relaxed">
-            Drop these 4-in-1 slips into customer bags. When they scan, their phone links to your store WhatsApp. Our AI concierge automatically reminds them before their medication runs out and routes their refill requests straight to your dispensary.
+            Drop these 4-in-1 slips into customer bags. When customers scan, their phone links to your store WhatsApp. Our AI concierge automatically reminds them before their medication runs out and routes their refill requests straight to your dispensary.
           </p>
 
           <div className="grid grid-cols-2 gap-2.5 pt-1">
@@ -463,16 +204,16 @@ function PortalInner() {
           </div>
         </div>
 
-        {/* ━━━ RECENT CHECK-INS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {/* ━━━ RECENT REFILL ALERTS & LINKED PATIENTS ━━━━━━━━━━━━━━━━━━━ */}
         <div className="bg-white rounded-3xl border border-slate-200/90 shadow-md p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="font-black text-sm text-slate-900">Recent Customer Visits</h3>
+            <h3 className="font-black text-sm text-slate-900">Recent Customer Activity</h3>
             <span className="text-[11px] text-slate-500 font-semibold">{recentVisits.length} recorded</span>
           </div>
 
           {recentVisits.length === 0 ? (
             <div className="text-center py-6 text-slate-400 text-xs">
-              No visits recorded yet today. Check in your first customer above!
+              No recent customer activity. New scans via bag slips will automatically appear here!
             </div>
           ) : (
             <div className="space-y-2">
@@ -484,7 +225,7 @@ function PortalInner() {
                     </div>
                     <div>
                       <div className="text-xs font-bold text-slate-900">{v.customer_name}</div>
-                      <div className="text-[10px] text-slate-500">{v.service_or_product || 'Regular Visit'}</div>
+                      <div className="text-[10px] text-slate-500">{v.service_or_product || 'Regular Refill'}</div>
                     </div>
                   </div>
                   <div className="text-right">
@@ -497,7 +238,6 @@ function PortalInner() {
             </div>
           )}
         </div>
-
       </main>
 
       {/* QR Code Modal for Stand */}
