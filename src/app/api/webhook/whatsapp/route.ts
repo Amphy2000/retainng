@@ -24,10 +24,49 @@ const conversationState: Record<
   }
 > = {};
 
-// --- Green-API config ---
-const GREEN_API_ID = process.env.GREEN_API_ID_INSTANCE || '710722811593';
-const GREEN_API_TOKEN =
-  process.env.GREEN_API_TOKEN || 'c7cea54f5c6f4d31a9b74eb6576493a8ec085b4f65a04a62b5';
+// --- Multi-Business Knowledge Base ---
+const KNOWN_BUSINESSES: Record<string, { name: string; type: string; location: string }> = {
+  'apex-pharmacy': { name: 'Apex Health & Community Pharmacy', type: 'pharmacy', location: 'Kaduna' },
+  'danfodio-pharmacy': { name: 'Danfodio Pharmacy', type: 'pharmacy', location: 'Barnawa, Kaduna' },
+  'lekki-barbers': { name: 'Lekki Grooming & Barber Lounge', type: 'barber', location: 'Lekki, Lagos' },
+  'yaba-glow': { name: 'Yaba Glow Hair Studio & Spa', type: 'salon', location: 'Yaba, Lagos' },
+  'sparklewash-ikeja': { name: 'SparkleWash Express Laundry', type: 'laundry', location: 'Ikeja, Lagos' },
+};
+
+function resolveBusiness(slugOrText: string): { slug: string; name: string; type: string; location: string } | null {
+  const lower = slugOrText.toLowerCase();
+
+  // 1. Direct slug match
+  if (KNOWN_BUSINESSES[lower]) {
+    return { slug: lower, ...KNOWN_BUSINESSES[lower] };
+  }
+
+  // 2. Keyword matching in user message
+  if (lower.includes('danfodio') || lower.includes('dan fodio')) {
+    return { slug: 'danfodio-pharmacy', ...KNOWN_BUSINESSES['danfodio-pharmacy'] };
+  }
+  if (lower.includes('apex')) {
+    return { slug: 'apex-pharmacy', ...KNOWN_BUSINESSES['apex-pharmacy'] };
+  }
+  if (lower.includes('barber') || lower.includes('haircut') || lower.includes('fade')) {
+    return { slug: 'lekki-barbers', ...KNOWN_BUSINESSES['lekki-barbers'] };
+  }
+
+  // 3. Fallback for custom slug formatting (e.g. "my-pharmacy" -> "My Pharmacy")
+  if (slugOrText && !slugOrText.includes(' ')) {
+    const formattedName = slugOrText
+      .split('-')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+    return { slug: slugOrText, name: formattedName, type: 'pharmacy', location: 'Kaduna' };
+  }
+
+  return null;
+}
+
+// --- Green-API credentials (read from Vercel environment variables) ---
+const GREEN_API_ID = process.env.GREEN_API_ID || '710722811593';
+const GREEN_API_TOKEN = process.env.GREEN_API_TOKEN || 'c7cea54f5c6f4d31a9b74eb6576493a8ec085b4f65a04a62b5';
 const GREEN_API_URL = process.env.GREEN_API_URL || 'https://7107.api.greenapi.com';
 
 /** Look up manager phone for any slug — reads from /api/pharmacy-config (no env vars needed) */
@@ -116,7 +155,7 @@ function detectIntentKeywords(msg: string): string {
     lower.includes('sugar') ||
     lower.includes('diabetes')
   ) {
-    return 'INTENT:REFILL medication=' + msg.trim();
+    return `No wahala at all! 💊 We have received your refill request.\n\nWould you like home delivery or will you pick it up at the pharmacy?\nORDER_DETECTED: ${msg.trim()}`;
   }
   if (
     lower.includes('deliver') ||
@@ -129,7 +168,7 @@ function detectIntentKeywords(msg: string): string {
     lower.includes('street') ||
     lower.includes('road')
   ) {
-    return 'INTENT:DELIVERY address=' + msg.trim();
+    return `📍 Got your address! Our team will prepare your order and call you to confirm delivery soon.\nORDER_DETECTED: delivery request`;
   }
   if (
     lower.includes('dosage') ||
@@ -144,7 +183,7 @@ function detectIntentKeywords(msg: string): string {
     lower.includes('question') ||
     lower.includes('?')
   ) {
-    return 'INTENT:CLINICAL question=' + msg.trim();
+    return `That is a great question! 🩺 For accurate clinical advice, please speak with our pharmacist directly. You can also call or visit us during opening hours.`;
   }
   if (
     lower.includes('hi') ||
@@ -155,9 +194,9 @@ function detectIntentKeywords(msg: string): string {
     lower.includes('how are') ||
     lower.includes('please')
   ) {
-    return 'INTENT:GREETING';
+    return `👋 Hello! Welcome to RetainNG Health Concierge. How can we help you today? If your medication is running low, just let us know!`;
   }
-  return 'INTENT:UNKNOWN message=' + msg.trim();
+  return `Hello! 👋 We are here to help with medication refills, delivery, and health queries. How can we assist you today?`;
 }
 
 export async function POST(req: NextRequest) {
@@ -224,58 +263,64 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ignored: 'empty-message' });
     }
 
-    // --- Pharmacy reference detection (first scan) ---
+    // --- Multi-Business attribution resolution ---
     const refMatch = messageBody.match(/\[ref:([a-zA-Z0-9_-]+)\]/i);
-    const incomingSlug = refMatch ? refMatch[1] : 'apex-pharmacy';
+    const resolvedBiz = resolveBusiness(refMatch ? refMatch[1] : messageBody);
+    const activeSlug = resolvedBiz?.slug || (refMatch ? refMatch[1] : 'general');
+    const activeBizName = resolvedBiz?.name || (refMatch ? refMatch[1] : null);
 
     // If first-time scan with [ref:...]
     if (refMatch) {
       const greeting = profileName ? ` ${profileName}` : '';
+      const bizDisplay = activeBizName || 'your pharmacy';
       const reply =
-        `🎉 *Welcome${greeting} to Apex Health & Community Pharmacy Care Concierge!*\n\n` +
-        `Your phone number (*...${cleanPhone.slice(-4)}*) is now linked to our pharmacy. ` +
+        `🎉 *Welcome${greeting} to ${bizDisplay} Care Concierge!*\n\n` +
+        `Your phone number (*...${cleanPhone.slice(-4)}*) is now linked to ${bizDisplay}. ` +
         `You will *never need to scan or type a code again.* 💊\n\n` +
         `Whenever your medication runs low, just message us here naturally — e.g. _"My BP drugs have finished"_ — ` +
-        `and our pharmacist will get it ready for pickup or home delivery!\n\n` +
-        `How can we support your health today?`;
+        `and our team will prepare it for pickup or home delivery!\n\n` +
+        `How can we support you today?`;
 
       await sendWhatsApp(cleanPhone, reply);
-      return NextResponse.json({ success: true, intent: 'onboard', phone: cleanPhone });
-    }
-
-    // If user replied "1" to select pharmacy
-    if (messageBody.trim() === '1') {
-      const greeting = profileName ? ` ${profileName}` : '';
-      const reply =
-        `🎉 *Welcome${greeting} to Apex Health & Community Pharmacy!*\n\n` +
-        `You are now connected with our care team. Whenever your medications run low, ` +
-        `just send a message here (e.g. _"Refill my BP drugs"_ or send your prescription name) ` +
-        `and we will prepare it for you! 💊\n\n` +
-        `What medication can we help you with today?`;
-
-      await sendWhatsApp(cleanPhone, reply);
-      return NextResponse.json({ success: true, intent: 'pharmacy_selected' });
+      return NextResponse.json({ success: true, intent: 'onboard', business: bizDisplay, phone: cleanPhone });
     }
 
     // =========================================================
-    // ALL CONVERSATIONS — Powered by Gemini 2.5 Flash
+    // CONVERSATIONS — Powered by Gemini 2.5 Flash
     // =========================================================
     const displayName = profileName || `Customer (...${cleanPhone.slice(-4)})`;
 
-    const systemPrompt = `You are a warm, highly competent AI pharmacy concierge for Apex Health & Community Pharmacy in Nigeria.
-The patient messaging you is named: ${displayName}
+    let systemPrompt = '';
+    if (activeBizName) {
+      systemPrompt = `You are a warm, highly competent AI concierge for ${activeBizName} in ${resolvedBiz?.location || 'Nigeria'}.
+The client messaging you is named: ${displayName}
 Their phone ending in: ...${cleanPhone.slice(-4)}
 
 Your guidelines:
-1. Respond helpfully, warmly, and concisely in simple Nigerian English (using friendly expressions when appropriate).
-2. If they mention BP, diabetes, refill, running out of drugs, or specific medications (e.g. Amlodipine, Metformin, Coartem): acknowledge their refill warmly and ask if they prefer home delivery or store pickup.
-3. If they provide a delivery address: confirm the address warmly and let them know the pharmacist is packaging it and will call them to confirm dispatch.
-4. If they ask clinical/dosage questions: give a clear, safe, accurate brief answer and invite them to speak with the pharmacist if needed.
+1. Respond helpfully, warmly, and concisely in simple Nigerian English (using friendly natural phrasing).
+2. If they mention refills, medications (e.g. Amlodipine, Metformin, BP, diabetes): acknowledge their request warmly on behalf of ${activeBizName} and ask if they prefer home delivery or store pickup.
+3. If they provide a delivery address: confirm the address warmly and let them know the ${activeBizName} team is packaging it and will call them to confirm dispatch.
+4. If they ask clinical/service questions: give a clear, safe, accurate brief answer and invite them to speak with the pharmacist/manager if needed.
 5. NEVER repeat menus or say "reply 1 for this, reply 2 for that". Be human, conversational, empathetic, and attentive.
 6. Keep replies concise (under 80 words).
 
-Important: If the patient is ordering or refilling medication, append this exact tag at the very end of your response on its own line:
-ORDER_DETECTED: [medication name]`;
+Important: If the patient is ordering or refilling a product/service, append this exact tag at the very end of your response on its own line:
+ORDER_DETECTED: [item or medication name]`;
+    } else {
+      systemPrompt = `You are a warm, highly competent AI concierge for RetainNG (the customer retention & refill concierge network in Nigeria).
+You represent partner businesses including Danfodio Pharmacy (Barnawa, Kaduna), Apex Health & Community Pharmacy, and Lekki Grooming & Barber Lounge.
+The client messaging you is named: ${displayName}
+Their phone ending in: ...${cleanPhone.slice(-4)}
+
+Your guidelines:
+1. Greet them warmly as RetainNG Concierge in friendly Nigerian English.
+2. If they ask for a refill or service without stating which pharmacy or store they visit: ask them warmly which of our partner stores or pharmacies they are registered with (e.g. Danfodio Pharmacy, Apex Health, etc.) so you can route their order immediately.
+3. If they mention a specific store name, acknowledge it and assist them with their request for that store.
+4. Keep replies friendly, concise, and helpful (under 80 words).
+
+Important: If an order or refill item is detected, append this exact tag at the very end of your response on its own line:
+ORDER_DETECTED: [item name]`;
+    }
 
     let aiReply = '';
     let isOrder = false;
@@ -305,17 +350,17 @@ ORDER_DETECTED: [medication name]`;
         detectedMed = messageBody.trim();
         isOrder = true;
         aiReply =
-          `Got it ${displayName}! 💊 We have received your medication refill request for *${detectedMed}*.\n\n` +
-          `Would you like to pick it up at the pharmacy or have it delivered to your address?`;
+          `Got it ${displayName}! 💊 We have received your refill request for *${detectedMed}*.\n\n` +
+          `Which pharmacy should we prepare this with — Danfodio Pharmacy or Apex Health? And would you like pickup or home delivery?`;
       } else if (kwResult.startsWith('INTENT:DELIVERY')) {
         isOrder = true;
         aiReply =
           `📍 Perfect! We have noted your delivery address:\n*${messageBody.trim()}*\n\n` +
-          `Our dispensary team will call you shortly to confirm and dispatch your medications.`;
+          `Our dispensary team will call you shortly to confirm and dispatch your order.`;
       } else {
         aiReply =
-          `Hello ${displayName}! 👋 How can we help you today?\n\n` +
-          `Feel free to tell us what medications you need refilled, or ask any question about your dosage or health. We're here for you! 💊`;
+          `Hello ${displayName}! 👋 Welcome to RetainNG Health & Care Concierge.\n\n` +
+          `Which of our partner pharmacies or stores are you reaching today? (e.g. Danfodio Pharmacy or Apex Health) Let us know and we'll assist you right away! 💊`;
       }
     }
 
@@ -324,13 +369,14 @@ ORDER_DETECTED: [medication name]`;
 
     // Send manager dispatch alert for refill orders
     if (isOrder) {
-      const managerPhone = await getManagerPhone(incomingSlug, host);
+      const managerPhone = await getManagerPhone(activeSlug, host);
       if (managerPhone) {
+        const targetStore = activeBizName || 'RetainNG Partner Store';
         const managerAlert =
-          `🚨 *NEW REFILL ORDER — Apex Health & Community Pharmacy*\n\n` +
-          `👤 *Patient:* ${displayName} (WhatsApp: ...${cleanPhone.slice(-4)})\n` +
+          `🚨 *NEW REFILL / SERVICE ORDER — ${targetStore}*\n\n` +
+          `👤 *Customer:* ${displayName} (WhatsApp: ...${cleanPhone.slice(-4)})\n` +
           `💊 *Order / Request:* ${detectedMed || messageBody}\n` +
-          `⏱️ *Status:* 28-day refill clock reset.\n` +
+          `⏱️ *Status:* Clock reset for 28 days.\n` +
           `📞 Please check with dispensary & call patient to confirm.`;
 
         await sendWhatsApp(managerPhone, managerAlert);
@@ -341,6 +387,7 @@ ORDER_DETECTED: [medication name]`;
       success: true,
       phone: cleanPhone,
       name: displayName,
+      business: activeBizName || 'RetainNG Network',
       order_detected: isOrder,
       reply: aiReply,
     });
