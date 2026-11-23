@@ -51,22 +51,55 @@ export async function POST(req: NextRequest) {
       .replace(/[^0-9]/g, '')
       .trim();
 
-    // Default response message
-    const replyText =
-      `🎉 Welcome! Your visit has been recorded on RetainNG.\n\n` +
-      `Show this message at the counter to claim your VIP perk today. We look forward to serving you!`;
+    // 1. Check if the message contains an automatic pharmacy reference tag: [ref:slug]
+    const refMatch = messageBody.match(/\[ref:([a-zA-Z0-9_-]+)\]/i);
+    const incomingSlug = refMatch ? refMatch[1] : null;
 
-    // Return Twilio-compatible TwiML response
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+    // Default response message
+    let replyText = '';
+
+    if (incomingSlug) {
+      // First-time scan from a bag slip or QR stand
+      // Automatically binds the customer to this specific pharmacy forever
+      replyText =
+        `🎉 *Welcome to your Pharmacy Care & Refill Concierge!*\n\n` +
+        `Your phone number (*...${cleanPhone.slice(-4)}*) is now linked to your pharmacy. ` +
+        `You never need to type any codes or numbers again.\n\n` +
+        `Whenever your medication runs low, just send a message here: e.g. _"Please send my Amlodipine refill"_, ` +
+        `and our team will prepare it for pickup or home delivery! 💊\n\n` +
+        `How can we support your health today?`;
+    } else {
+      // Subsequent chat or conversational message (zero codes typed by user)
+      // The system recognizes the user by phone number from past records
+      replyText =
+        `👋 *Hello! Welcome back to your Pharmacy Health Concierge.*\n\n` +
+        `We have your profile on file. How can we assist you today?\n\n` +
+        `• *Refill:* Reply with your medication name (e.g. _"Refill my BP drugs"_)\n` +
+        `• *Delivery:* Send your address for doorstep dispatch\n` +
+        `• *Pharmacist:* Ask any question about dosage or side-effects.\n\n` +
+        `_Your care team is on standby._`;
+    }
+
+    // Return response in standard JSON (for Green-API / Whapi / Meta) and TwiML (for Twilio)
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Message>${replyText}</Message>
 </Response>`;
 
-    return new NextResponse(twiml, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/xml; charset=utf-8',
-      },
+      return new NextResponse(twiml, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/xml; charset=utf-8',
+        },
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      phone: cleanPhone,
+      recognized_slug: incomingSlug,
+      reply: replyText,
     });
   } catch (err: unknown) {
     console.error('WhatsApp webhook error:', err);
