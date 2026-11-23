@@ -3,891 +3,647 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useIsMounted } from '@/lib/useMounted';
-import { OnboardingBanner } from '@/components/OnboardingBanner';
-import { DailyShiftModal } from '@/components/DailyShiftModal';
-import { CameraScannerModal } from '@/components/CameraScannerModal';
-import { formatNgn, formatDate, formatRelativeTime, getWhatsAppUrl, parsePaymentAlert } from '@/lib/utils';
-import { recordSale } from '@/lib/storage';
+import { formatNgn, formatRelativeTime, getWhatsAppUrl } from '@/lib/utils';
+import { getBusinesses, getCustomers, getSales, setActiveBusiness } from '@/lib/storage';
+import { Business } from '@/types';
+import Link from 'next/link';
 import {
+  Bot,
+  TrendingUp,
   Users,
-  Receipt,
-  UserCheck,
-  Repeat,
+  Zap,
+  ArrowRight,
+  MessageCircle,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  BarChart2,
   PlusCircle,
   QrCode,
   Send,
-  ArrowRight,
+  Building2,
   Sparkles,
-  MessageCircle,
-  CheckCircle2,
-  Printer,
-  Zap,
-  Clock,
-  AlertTriangle,
-  HeartHandshake,
-  Tablet,
-  Camera,
-  Bot,
+  ShieldCheck,
+  RefreshCw,
 } from 'lucide-react';
-import Link from 'next/link';
 
-export default function DashboardPage() {
-  const {
-    activeBusiness,
-    customers,
-    sales,
-    refreshData,
-    openRecordSaleModal,
-    openQrModal,
-    openCustomerDetail,
-  } = useApp();
+const BIZ_ICONS: Record<string, string> = {
+  barber: '💈',
+  salon: '💅',
+  laundry: '🧺',
+  car_wash: '🚗',
+  boutique: '👗',
+  spa_wellness: '🧖',
+  pharmacy: '💊',
+  clinic: '🏥',
+  other: '🏪',
+};
 
+const BIZ_CADENCE: Record<string, number> = {
+  barber: 14,
+  salon: 21,
+  laundry: 10,
+  car_wash: 14,
+  boutique: 30,
+  spa_wellness: 21,
+  pharmacy: 28,
+  clinic: 60,
+  other: 21,
+};
+
+function getHealthScore(customers: ReturnType<typeof getCustomers>, sales: ReturnType<typeof getSales>, cadence: number): number {
+  if (customers.length === 0) return 50;
+  const now = new Date();
+  const consentRate = customers.filter(c => c.consent_status === 'consented').length / customers.length;
+  const activeRate = customers.filter(c => {
+    if (!c.last_visit_date) return false;
+    const diff = Math.floor((now.getTime() - new Date(c.last_visit_date).getTime()) / 86400000);
+    return diff <= cadence;
+  }).length / Math.max(customers.length, 1);
+  const hasRecentSales = sales.some(s => {
+    const diff = Math.floor((now.getTime() - new Date(s.created_at).getTime()) / 86400000);
+    return diff <= 7;
+  });
+  const score = Math.round((consentRate * 40) + (activeRate * 45) + (hasRecentSales ? 15 : 0));
+  return Math.max(10, Math.min(99, score));
+}
+
+function healthColor(score: number) {
+  if (score >= 75) return { ring: 'border-emerald-500/40', bg: 'bg-emerald-500/10', text: 'text-emerald-400', label: 'Healthy' };
+  if (score >= 50) return { ring: 'border-amber-500/40', bg: 'bg-amber-500/10', text: 'text-amber-400', label: 'Needs Care' };
+  return { ring: 'border-rose-500/40', bg: 'bg-rose-500/10', text: 'text-rose-400', label: 'At Risk' };
+}
+
+export default function AgencyHQPage() {
+  const { activeBusiness, customers, sales, refreshData, openRecordSaleModal, openQrModal } = useApp();
   const mounted = useIsMounted();
-  const [isDailyShiftOpen, setIsDailyShiftOpen] = useState(false);
-  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
+  const [quickCheckIn, setQuickCheckIn] = useState(false);
+  const [quickAmount, setQuickAmount] = useState('5000');
+  const [quickCustId, setQuickCustId] = useState('');
+  const [checkinSuccess, setCheckinSuccess] = useState<string | null>(null);
 
-  // Quick 3-second check-in bar state (Grandma-simple)
-  const [quickCustomerId, setQuickCustomerId] = useState<string>('');
-  const [quickIsWalkin, setQuickIsWalkin] = useState<boolean>(false);
-  const [quickAmount, setQuickAmount] = useState<number>(5000);
-  const [quickCustomAmount, setQuickCustomAmount] = useState<string>('');
-  const [quickSuccessMsg, setQuickSuccessMsg] = useState<string | null>(null);
-  const [quickAlertText, setQuickAlertText] = useState<string>('');
-
-  function handleQuickAlertPaste(text: string) {
-    setQuickAlertText(text);
+  // Load ALL businesses + their data for agency overview
+  const allBusinessData = useMemo(() => {
+    if (!mounted) return [];
     try {
-      const parsed = parsePaymentAlert(text);
-      if (parsed.amount) {
-        setQuickAmount(parsed.amount);
-        setQuickCustomAmount(String(parsed.amount));
-      }
-      if (parsed.name) {
-        const queryName = parsed.name.toLowerCase();
-        const found = customers.find((c) => {
-          const cName = (c?.full_name || '').toLowerCase();
-          return cName.includes(queryName) || queryName.includes(cName);
+      const bizList = getBusinesses();
+      return bizList.map((biz) => {
+        const bizCustomers = getCustomers(biz.id);
+        const bizSales = getSales(biz.id);
+        const cadence = BIZ_CADENCE[biz.business_type] || 21;
+        const now = new Date();
+        const lapsedCustomers = bizCustomers.filter(c => {
+          if (!c.last_visit_date || c.consent_status !== 'consented') return false;
+          const diff = Math.floor((now.getTime() - new Date(c.last_visit_date).getTime()) / 86400000);
+          return diff >= cadence;
         });
-        if (found) {
-          setQuickCustomerId(found.id);
-          setQuickIsWalkin(false);
-        }
+        const thisMonthStr = new Date().toISOString().slice(0, 7);
+        const thisMonthSales = bizSales.filter(s => s.visit_date?.startsWith(thisMonthStr));
+        const monthRevenue = thisMonthSales.reduce((a, s) => a + (Number(s.amount_ngn) || 0), 0);
+        const totalRevenue = bizSales.reduce((a, s) => a + (Number(s.amount_ngn) || 0), 0);
+        const consentedCount = bizCustomers.filter(c => c.consent_status === 'consented').length;
+        const health = getHealthScore(bizCustomers, bizSales, cadence);
+        const lapsedValue = lapsedCustomers.reduce((a, c) => a + (c.total_spent_ngn || 5000), 0);
+        return {
+          biz,
+          customers: bizCustomers,
+          sales: bizSales,
+          lapsedCustomers,
+          monthRevenue,
+          totalRevenue,
+          consentedCount,
+          health,
+          lapsedValue,
+          cadence,
+        };
+      });
+    } catch {
+      return [];
+    }
+  }, [mounted]);
+
+  // Global agency metrics
+  const globalMetrics = useMemo(() => {
+    const totalClients = allBusinessData.length;
+    const totalCustomers = allBusinessData.reduce((a, d) => a + d.customers.length, 0);
+    const totalConsentRate = totalCustomers > 0
+      ? Math.round((allBusinessData.reduce((a, d) => a + d.consentedCount, 0) / totalCustomers) * 100)
+      : 0;
+    const totalLapsed = allBusinessData.reduce((a, d) => a + d.lapsedCustomers.length, 0);
+    const totalLapsedValue = allBusinessData.reduce((a, d) => a + d.lapsedValue, 0);
+    const totalMonthRevenue = allBusinessData.reduce((a, d) => a + d.monthRevenue, 0);
+    const avgHealth = allBusinessData.length > 0
+      ? Math.round(allBusinessData.reduce((a, d) => a + d.health, 0) / allBusinessData.length)
+      : 0;
+    return { totalClients, totalCustomers, totalConsentRate, totalLapsed, totalLapsedValue, totalMonthRevenue, avgHealth };
+  }, [allBusinessData]);
+
+  // AI live action feed across all businesses
+  const aiLiveFeed = useMemo(() => {
+    const now = new Date();
+    const actions: Array<{
+      bizName: string;
+      bizType: string;
+      action: string;
+      customerName: string;
+      customerPhone: string;
+      waUrl: string;
+      status: 'queued' | 'urgent';
+      value: number;
+    }> = [];
+
+    for (const data of allBusinessData) {
+      const cadence = data.cadence;
+      for (const c of data.lapsedCustomers.slice(0, 2)) {
+        const diff = Math.floor((now.getTime() - new Date(c.last_visit_date!).getTime()) / 86400000);
+        const firstName = c.full_name?.split(' ')[0] || 'Customer';
+        const bizName = data.biz.name;
+        const isPharmacy = data.biz.business_type === 'pharmacy';
+        const msg = isPharmacy
+          ? `Hello ${firstName}! 💊 This is ${bizName}. Your ${cadence}-day refill window is now open. Reply here to schedule your next pickup or delivery — we'll have it ready for you!`
+          : `Hello ${firstName}! It's ${bizName}. We noticed it's been ${diff} days since your last visit. We'd love to see you back this week — reply to claim your VIP priority slot!`;
+        actions.push({
+          bizName: data.biz.name,
+          bizType: data.biz.business_type,
+          action: isPharmacy ? 'Refill Reminder' : 'Lapsed Recovery',
+          customerName: c.full_name || 'Customer',
+          customerPhone: c.phone,
+          waUrl: getWhatsAppUrl(c.phone, msg),
+          status: diff > cadence * 1.5 ? 'urgent' : 'queued',
+          value: c.total_spent_ngn || 5000,
+        });
       }
+    }
+    return actions.slice(0, 8);
+  }, [allBusinessData]);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const topCustomers = customers.slice(0, 5);
+
+  function handleQuickLog() {
+    if (!activeBusiness) return;
+    const { recordSale } = require('@/lib/storage');
+    try {
+      const amount = Number(quickAmount) || 5000;
+      if (quickCustId) {
+        recordSale(activeBusiness.id, {
+          customer_id: quickCustId,
+          amount_ngn: amount,
+          visit_date: todayStr,
+          service_or_product: 'Staff-logged Visit',
+        });
+        const cust = customers.find(c => c.id === quickCustId);
+        setCheckinSuccess(`✓ ${cust?.full_name?.split(' ')[0] || 'Customer'} — ₦${amount.toLocaleString()} logged`);
+      } else {
+        recordSale(activeBusiness.id, {
+          new_customer_name: 'Walk-in Guest',
+          new_customer_phone: '08000000000',
+          amount_ngn: amount,
+          visit_date: todayStr,
+          service_or_product: 'Walk-in Visit',
+          grant_marketing_consent: false,
+        });
+        setCheckinSuccess(`✓ Walk-in ₦${amount.toLocaleString()} logged`);
+      }
+      refreshData();
+      setQuickCheckIn(false);
+      setTimeout(() => setCheckinSuccess(null), 4000);
     } catch (err) {
-      console.error('Alert parsing failed safely:', err);
+      console.error(err);
     }
   }
 
-  // Filter lapsed customers (visited previously but not in last 25+ days)
-  const lapsedCustomers = useMemo(() => {
-    const now = new Date();
-    return customers
-      .filter((c) => {
-        if (!c.last_visit_date) return false;
-        const diffDays = Math.floor(
-          (now.getTime() - new Date(c.last_visit_date).getTime()) / (1000 * 60 * 60 * 24)
-        );
-        return diffDays >= 25;
-      })
-      .slice(0, 4);
-  }, [customers]);
-
-  // Estimated lost revenue from lapsed customers
-  const estimatedLostRevenue = useMemo(() => {
-    return lapsedCustomers.reduce((acc, c) => acc + (c.total_spent_ngn || 6000), 0);
-  }, [lapsedCustomers]);
-
-  // Repeat customer revenue (revenue generated from customers with 2+ visits)
-  const repeatRevenueNgn = useMemo(() => {
-    return customers
-      .filter((c) => (c.total_visits || 0) >= 2)
-      .reduce((acc, c) => acc + (Number(c.total_spent_ngn) || 0), 0);
-  }, [customers]);
-
-  if (!mounted || !activeBusiness) {
+  if (!mounted) {
     return (
-      <div className="py-12 text-center text-slate-400 text-sm">
-        Loading business dashboard...
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-slate-500 text-sm">Loading Agency HQ...</div>
       </div>
     );
   }
 
-  // Dashboard Metrics
-  const totalCustomers = customers.length;
-  const consentedCustomers = customers.filter((c) => c.consent_status === 'consented').length;
-  const consentedPct = totalCustomers > 0 ? Math.round((consentedCustomers / totalCustomers) * 100) : 0;
-
-  const totalVisits = sales.length;
-  const totalRevenueNgn = sales.reduce((acc, s) => acc + (Number(s.amount_ngn) || 0), 0);
-
-  // Today's shift metrics
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todaySales = sales.filter((s) => s.visit_date === todayStr);
-  const todayRevenueNgn = todaySales.reduce((acc, s) => acc + (Number(s.amount_ngn) || 0), 0);
-
-  // Repeat customers (customers with 2 or more recorded sales/visits)
-  const repeatCustomers = customers.filter((c) => (c.total_visits || 0) >= 2).length;
-  const repeatRate = totalCustomers > 0 ? Math.round((repeatCustomers / totalCustomers) * 100) : 0;
-
-  const recentSales = sales.slice(0, 6);
-
-  // Top 5 regulars for 1-tap quick check-in
-  const topRegulars = customers.slice(0, 5);
-
-  // Handle 3-second rapid check-in
-  function handleFastCheckIn() {
-    if (!activeBusiness) return;
-    const finalAmount = quickCustomAmount ? Number(quickCustomAmount) : quickAmount;
-    if (isNaN(finalAmount) || finalAmount < 0) return;
-
-    try {
-      if (quickIsWalkin) {
-        recordSale(activeBusiness.id, {
-          new_customer_name: 'Walk-in Guest',
-          new_customer_phone: '08000000000',
-          amount_ngn: finalAmount,
-          visit_date: todayStr,
-          service_or_product: 'General Service',
-          grant_marketing_consent: false,
-        });
-        setQuickSuccessMsg(`Logged ₦${finalAmount.toLocaleString()} walk-in visit!`);
-      } else {
-        const selectedId = quickCustomerId || (topRegulars[0]?.id ?? '');
-        if (!selectedId) {
-          // If no customer selected or exists, record as walk-in
-          recordSale(activeBusiness.id, {
-            new_customer_name: 'Walk-in Guest',
-            new_customer_phone: '08000000000',
-            amount_ngn: finalAmount,
-            visit_date: todayStr,
-            service_or_product: 'General Service',
-            grant_marketing_consent: false,
-          });
-          setQuickSuccessMsg(`Logged ₦${finalAmount.toLocaleString()} visit!`);
-        } else {
-          const cust = customers.find((c) => c.id === selectedId);
-          recordSale(activeBusiness.id, {
-            customer_id: selectedId,
-            amount_ngn: finalAmount,
-            visit_date: todayStr,
-            service_or_product: 'Regular Visit',
-          });
-          const firstName = cust?.full_name ? cust.full_name.split(' ')[0] : 'Customer';
-          setQuickSuccessMsg(`Logged ₦${finalAmount.toLocaleString()} for ${firstName}!`);
-        }
-      }
-
-      refreshData();
-      setTimeout(() => setQuickSuccessMsg(null), 3500);
-    } catch (err) {
-      console.error('Fast check-in error:', err);
-      setQuickSuccessMsg('Visit recorded successfully!');
-      refreshData();
-      setTimeout(() => setQuickSuccessMsg(null), 3500);
-    }
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Onboarding Guidance Checklist */}
-      <OnboardingBanner
-        onOpenRecordModal={() => openRecordSaleModal()}
-        onOpenQrModal={openQrModal}
-      />
+    <div className="space-y-6 pb-4">
 
-      {/* Top Header & Quick Action Buttons */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-              {activeBusiness.business_type} • {activeBusiness.city}
-            </span>
-            {activeBusiness.is_demo && (
-              <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                Demo Mode Active
-              </span>
-            )}
+      {/* ━━━ AGENCY HERO HEADER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <div className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 rounded-2xl border border-slate-800 overflow-hidden p-5 sm:p-7">
+        {/* Decorative grid */}
+        <div className="absolute inset-0 opacity-[0.03]"
+          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.8) 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+        />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+
+        <div className="relative flex flex-col sm:flex-row sm:items-start justify-between gap-5">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/15 border border-emerald-500/25 rounded-full">
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Agency Autopilot — Active</span>
+              </div>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">
+              Agency HQ
+            </h1>
+            <p className="text-sm text-slate-400 mt-1 max-w-xl leading-relaxed">
+              Your AI is actively monitoring <span className="text-emerald-400 font-semibold">{globalMetrics.totalClients} client businesses</span>, running retention playbooks, and queuing personalized re-engagement messages — 24/7 on autopilot.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
-            {activeBusiness.name}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Customer retention and visit tracking overview.
-          </p>
+
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button
+              onClick={() => openRecordSaleModal()}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-900/40 transition cursor-pointer"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Log Visit
+            </button>
+            <button
+              onClick={() => openQrModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl border border-slate-700 transition cursor-pointer"
+            >
+              <QrCode className="w-4 h-4 text-emerald-400" />
+              Counter Stand
+            </button>
+          </div>
         </div>
 
-        {/* Quick Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => openRecordSaleModal()}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md transition cursor-pointer"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>+ Full Record Modal</span>
-          </button>
-
-          <button
-            onClick={() => setIsDailyShiftOpen(true)}
-            title="View today's recorded visits and staff commission split"
-            className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 font-semibold text-xs rounded-xl border border-amber-200 shadow-2xs transition"
-          >
-            <span className="font-bold text-amber-700">₦</span>
-            <span>Shift Tally ({todaySales.length})</span>
-          </button>
-
-          <button
-            onClick={() => openQrModal(true)}
-            className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-2xs transition"
-          >
-            <Printer className="w-4 h-4 text-emerald-400" />
-            <span>Print Counter Stand</span>
-          </button>
+        {/* ━━ Global Impact Metrics ━━ */}
+        <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+          {[
+            {
+              label: 'Managed Clients',
+              value: globalMetrics.totalClients,
+              icon: Building2,
+              color: 'text-emerald-400',
+              sub: 'All on AI autopilot',
+            },
+            {
+              label: 'Revenue At Risk',
+              value: formatNgn(globalMetrics.totalLapsedValue),
+              icon: TrendingUp,
+              color: 'text-amber-400',
+              sub: `${globalMetrics.totalLapsed} lapsed customers`,
+            },
+            {
+              label: 'Total Customers',
+              value: globalMetrics.totalCustomers,
+              icon: Users,
+              color: 'text-sky-400',
+              sub: `${globalMetrics.totalConsentRate}% AI consent rate`,
+            },
+            {
+              label: 'Avg Client Health',
+              value: `${globalMetrics.avgHealth}%`,
+              icon: Zap,
+              color: globalMetrics.avgHealth >= 70 ? 'text-emerald-400' : 'text-amber-400',
+              sub: 'Across all clients',
+            },
+          ].map((m) => {
+            const Icon = m.icon;
+            return (
+              <div key={m.label} className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
+                <div className={`flex items-center gap-1.5 mb-1`}>
+                  <Icon className={`w-3.5 h-3.5 ${m.color}`} />
+                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{m.label}</span>
+                </div>
+                <div className={`text-xl sm:text-2xl font-black ${m.color} leading-none`}>{m.value}</div>
+                <div className="text-[10px] text-slate-600 mt-1">{m.sub}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* 🤖 AI AUTOPILOT CAMPAIGN TEAM BANNER */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 text-white rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-start sm:items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
-            <Bot className="w-5 h-5 text-emerald-400" />
+      {/* ━━━ CLIENT PORTFOLIO GRID ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-base font-black text-slate-900">Client Portfolio</h2>
+            <p className="text-xs text-slate-500 mt-0.5">AI retention running for every client below</p>
           </div>
+          <Link href="/settings" className="text-xs text-emerald-700 font-semibold hover:text-emerald-600 flex items-center gap-1 transition">
+            + Add Client <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {allBusinessData.map((data) => {
+            const { biz, customers: bizCusts, lapsedCustomers, monthRevenue, health, lapsedValue } = data;
+            const hc = healthColor(health);
+            const icon = BIZ_ICONS[biz.business_type] || '🏪';
+            const isActive = biz.id === activeBusiness?.id;
+            const consentedPct = bizCusts.length > 0 ? Math.round((bizCusts.filter(c => c.consent_status === 'consented').length / bizCusts.length) * 100) : 0;
+
+            return (
+              <div
+                key={biz.id}
+                className={`relative bg-white border-2 rounded-2xl p-4 transition group ${
+                  isActive ? 'border-emerald-400 shadow-md shadow-emerald-100' : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
+                }`}
+              >
+                {isActive && (
+                  <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 border border-emerald-400/30 rounded-full">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="text-[9px] font-black text-emerald-700 uppercase tracking-wider">Active</span>
+                  </div>
+                )}
+
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl">{icon}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-extrabold text-sm text-slate-900 leading-tight truncate pr-10">{biz.name}</div>
+                    <div className="text-[11px] text-slate-500 capitalize mt-0.5">{biz.business_type} • {biz.city}</div>
+                  </div>
+                </div>
+
+                {/* Health bar */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Client Health</span>
+                    <span className={`text-xs font-black ${hc.text}`}>{health}% — {hc.label}</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${health >= 75 ? 'bg-emerald-500' : health >= 50 ? 'bg-amber-400' : 'bg-rose-500'}`}
+                      style={{ width: `${health}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Key numbers */}
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  <div className="bg-slate-50 rounded-xl p-2 text-center">
+                    <div className="text-sm font-black text-slate-800">{bizCusts.length}</div>
+                    <div className="text-[9px] text-slate-500 font-medium mt-0.5">Customers</div>
+                  </div>
+                  <div className={`${lapsedCustomers.length > 0 ? 'bg-amber-50' : 'bg-slate-50'} rounded-xl p-2 text-center`}>
+                    <div className={`text-sm font-black ${lapsedCustomers.length > 0 ? 'text-amber-700' : 'text-slate-800'}`}>
+                      {lapsedCustomers.length}
+                    </div>
+                    <div className="text-[9px] text-slate-500 font-medium mt-0.5">AI Queued</div>
+                  </div>
+                  <div className="bg-emerald-50 rounded-xl p-2 text-center">
+                    <div className="text-sm font-black text-emerald-800">{consentedPct}%</div>
+                    <div className="text-[9px] text-slate-500 font-medium mt-0.5">Consented</div>
+                  </div>
+                </div>
+
+                {/* Revenue at risk callout */}
+                {lapsedValue > 0 && (
+                  <div className="mt-3 flex items-center gap-2 px-2.5 py-1.5 bg-amber-50 border border-amber-200/80 rounded-xl">
+                    <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                    <span className="text-[11px] text-amber-800 font-semibold">
+                      {formatNgn(lapsedValue)} revenue at risk — AI is working on it
+                    </span>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => {
+                      setActiveBusiness(biz.id);
+                      refreshData();
+                    }}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${
+                      isActive
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                        : 'bg-slate-900 text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {isActive ? '✓ Managing' : 'Manage Client'}
+                  </button>
+                  <Link
+                    href="/campaigns"
+                    className="flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition"
+                    onClick={() => { if (!isActive) { setActiveBusiness(biz.id); refreshData(); } }}
+                  >
+                    <Bot className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">AI</span>
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ━━━ AI LIVE COMMAND FEED ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-black uppercase tracking-wider text-emerald-400">
-                AI Autopilot Marketing Team Active
+              <h2 className="text-base font-black text-slate-900">AI Live Action Feed</h2>
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-emerald-100 border border-emerald-200 rounded-full text-[10px] font-black text-emerald-700">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                LIVE
               </span>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             </div>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Staff only logs visits at the counter. RetainNG AI automatically monitors regulars, detects churn, and queues personalized WhatsApp re-invites for you.
-            </p>
+            <p className="text-xs text-slate-500 mt-0.5">What your AI marketing team is doing right now across all clients</p>
           </div>
+          <Link href="/campaigns" className="text-xs text-emerald-700 font-semibold hover:text-emerald-600 flex items-center gap-1 transition">
+            Full Center <ArrowRight className="w-3 h-3" />
+          </Link>
         </div>
 
-        <Link
-          href="/campaigns"
-          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 shrink-0"
-        >
-          <span>Open AI Campaign Team</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </Link>
+        {aiLiveFeed.length === 0 ? (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+            <p className="text-sm font-bold text-emerald-900">All caught up!</p>
+            <p className="text-xs text-emerald-700 mt-1">No lapsed customers detected. AI is on standby.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {aiLiveFeed.map((action, i) => {
+              const bizIcon = BIZ_ICONS[action.bizType] || '🏪';
+              return (
+                <div
+                  key={i}
+                  className={`flex items-start gap-3 p-3.5 rounded-2xl border transition group ${
+                    action.status === 'urgent'
+                      ? 'bg-rose-50 border-rose-200/80'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {/* Status dot */}
+                  <div className={`mt-0.5 w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-sm ${
+                    action.status === 'urgent' ? 'bg-rose-100' : 'bg-emerald-50'
+                  }`}>
+                    {bizIcon}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-black text-slate-900">{action.customerName}</span>
+                      <span className="text-[10px] text-slate-400">via</span>
+                      <span className="text-[10px] font-semibold text-slate-600 truncate">{action.bizName}</span>
+                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wide ${
+                        action.status === 'urgent'
+                          ? 'bg-rose-100 text-rose-700'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {action.status === 'urgent' ? '🔴 Urgent' : '🟡 Queued'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5">
+                      <Bot className="w-3 h-3 text-emerald-500" />
+                      <span>{action.action}</span>
+                      <span className="text-slate-300">•</span>
+                      <span className="text-emerald-700 font-semibold">{formatNgn(action.value)} potential</span>
+                    </div>
+                  </div>
+
+                  <a
+                    href={action.waUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-xl transition shadow-sm"
+                  >
+                    <Send className="w-3 h-3" />
+                    <span className="hidden sm:inline">Send</span>
+                  </a>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* The Anti-Double-Bookkeeping Guarantee Card */}
-      <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200/80 rounded-2xl p-4 sm:p-5 shadow-2xs">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">
-                ✓
-              </span>
-              <h3 className="font-extrabold text-sm sm:text-base text-emerald-950">
-                Why RetainNG is NOT Bookkeeping
-              </h3>
+      {/* ━━━ ACTIVE CLIENT QUICK CHECK-IN BAR ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      {activeBusiness && (
+        <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+          <button
+            onClick={() => setQuickCheckIn(!quickCheckIn)}
+            className="w-full flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/50 transition"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="text-left">
+                <div className="text-xs font-black text-white">
+                  Quick Staff Check-in
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  {activeBusiness.name} · 3-second log
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-emerald-900/90 leading-relaxed max-w-2xl">
-              Keep your POS, cash register, Moniepoint, or OPay unchanged. No balancing ledgers or entering expenses. RetainNG only watches who visited and alerts you when regular customers stop coming, so you can bring them back with 1-tap WhatsApp invites.
-            </p>
-          </div>
+            <div className={`w-6 h-6 rounded-lg bg-slate-700 flex items-center justify-center transition ${quickCheckIn ? 'rotate-180' : ''}`}>
+              <ArrowRight className="w-3 h-3 text-slate-400 rotate-90" />
+            </div>
+          </button>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <div className="px-3 py-1.5 bg-white/80 rounded-xl border border-emerald-200 text-[11px] font-bold text-emerald-800 flex items-center gap-1.5 shadow-2xs">
-              <Zap className="w-3.5 h-3.5 text-amber-600" />
-              <span>3-Second Check-in</span>
-            </div>
-            <div className="px-3 py-1.5 bg-white/80 rounded-xl border border-emerald-200 text-[11px] font-bold text-emerald-800 flex items-center gap-1.5 shadow-2xs">
-              <HeartHandshake className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Zero POS Conflict</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ⚡ 3-SECOND RAPID CHECK-IN BAR (Grandma-Simple) */}
-      <div className="bg-white rounded-2xl border-2 border-emerald-500/30 p-4 sm:p-5 shadow-sm space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-xs">
-              ⚡
-            </div>
-            <div>
-              <h2 className="text-sm sm:text-base font-extrabold text-slate-900">
-                3-Second Counter Check-In
-              </h2>
-              <p className="text-xs text-slate-500">
-                Tap who visited and amount. Even your newest staff or grandma can operate this!
-              </p>
-            </div>
-          </div>
-
-          {quickSuccessMsg && (
-            <div className="px-3 py-1.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-300 animate-in fade-in flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>{quickSuccessMsg}</span>
+          {quickCheckIn && (
+            <div className="border-t border-slate-800 p-4 space-y-3">
+              {checkinSuccess && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/15 border border-emerald-500/25 rounded-xl">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-emerald-300">{checkinSuccess}</span>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block mb-1">Customer</label>
+                  <select
+                    value={quickCustId}
+                    onChange={e => setQuickCustId(e.target.value)}
+                    className="w-full px-2.5 py-2 text-xs bg-slate-800 border border-slate-700 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">Walk-in Guest</option>
+                    {topCustomers.map(c => (
+                      <option key={c.id} value={c.id}>{c.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block mb-1">Amount (₦)</label>
+                  <input
+                    type="number"
+                    value={quickAmount}
+                    onChange={e => setQuickAmount(e.target.value)}
+                    className="w-full px-2.5 py-2 text-xs bg-slate-800 border border-slate-700 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="5000"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleQuickLog}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" /> Log Visit Now
+              </button>
             </div>
           )}
         </div>
-
-        {/* Step 1: Customer Tap */}
-        <div className="space-y-1.5 pt-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              1. Select Customer (Or Paste Bank Alert):
-            </span>
-            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">
-              ⚡ 0-Typing Mode
-            </span>
-          </div>
-
-          {/* Quick Paste Alert Input */}
-          <div>
-            <input
-              type="text"
-              placeholder="⚡ Paste Moniepoint / OPay transfer SMS (e.g. Credit: NGN 6,000 from Chidi Okafor...)"
-              value={quickAlertText}
-              onChange={(e) => handleQuickAlertPaste(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs rounded-xl border border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-emerald-50/40 font-medium placeholder:text-slate-400"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
-            {/* Scan with Staff Camera Button (Zero Extra Hardware Needed) */}
-            <button
-              type="button"
-              onClick={() => setIsCameraScannerOpen(true)}
-              className="px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition flex items-center gap-1.5 cursor-pointer border bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
-              title="Scan customer barcode or QR with phone camera"
-            >
-              <Camera className="w-3.5 h-3.5 text-emerald-700" />
-              <span>📷 Scan Barcode / QR</span>
-            </button>
-
-            {/* Walk-in Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setQuickIsWalkin(true);
-                setQuickCustomerId('');
-              }}
-              className={`px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition flex items-center gap-1.5 cursor-pointer border ${
-                quickIsWalkin
-                  ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-xs'
-                  : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
-              }`}
-            >
-              <span>⚡ Fast Walk-in (No Name)</span>
-            </button>
-
-            {/* Top Regular Faces */}
-            {topRegulars.map((cust) => {
-              const isSelected = !quickIsWalkin && (quickCustomerId === cust.id || (!quickCustomerId && topRegulars[0]?.id === cust.id));
-              return (
-                <button
-                  key={cust.id}
-                  type="button"
-                  onClick={() => {
-                    setQuickIsWalkin(false);
-                    setQuickCustomerId(cust.id);
-                  }}
-                  className={`px-3 py-2 rounded-xl text-xs shrink-0 transition flex items-center gap-2 cursor-pointer border ${
-                    isSelected
-                      ? 'bg-emerald-700 text-white border-emerald-700 font-extrabold shadow-xs'
-                      : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200 font-medium'
-                  }`}
-                >
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                    isSelected ? 'bg-white text-emerald-800' : 'bg-slate-200 text-slate-700'
-                  }`}>
-                    {cust.full_name?.charAt(0) || 'C'}
-                  </span>
-                  <span>{cust.full_name?.split(' ')[0] || cust.full_name || 'Customer'}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Step 2: Amount Tap & Save in 1 line */}
-        <div className="space-y-1.5 pt-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            2. Tap Amount & Save:
-          </span>
-          <div className="flex flex-wrap items-center gap-2">
-            {[2500, 5000, 7500, 10000, 15000].map((amt) => {
-              const isSelected = !quickCustomAmount && quickAmount === amt;
-              return (
-                <button
-                  key={amt}
-                  type="button"
-                  onClick={() => {
-                    setQuickAmount(amt);
-                    setQuickCustomAmount('');
-                  }}
-                  className={`px-3.5 py-2 text-xs rounded-xl font-bold transition border cursor-pointer ${
-                    isSelected
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
-                  }`}
-                >
-                  ₦{amt.toLocaleString()}
-                </button>
-              );
-            })}
-
-            <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                ₦
-              </span>
-              <input
-                type="number"
-                placeholder="Other"
-                value={quickCustomAmount}
-                onChange={(e) => setQuickCustomAmount(e.target.value)}
-                className="w-24 pl-6 pr-2 py-1.5 text-xs font-bold rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-
-            {/* BIG ACTION BUTTON */}
-            <button
-              type="button"
-              onClick={handleFastCheckIn}
-              className="ml-auto px-5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>✓ Save Visit in 3s</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 🔥 THE PAINFUL PROBLEM SOLVED: LOST REVENUE RECOVERY */}
-      {lapsedCustomers.length > 0 && (
-        <div className="bg-white rounded-2xl border-2 border-rose-200 p-5 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-100 pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center font-bold">
-                <AlertTriangle className="w-5 h-5 text-rose-600" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-                  <span>Revenue Recovery Alert: Lapsed Regulars</span>
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">
-                    {lapsedCustomers.length} slipping away
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  These customers used to visit regularly but haven&apos;t returned in 25+ days. Send a 1-tap WhatsApp invite to fill your quiet slots!
-                </p>
-              </div>
-            </div>
-
-            <div className="text-left sm:text-right shrink-0">
-              <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                Est. Revenue at Risk
-              </span>
-              <p className="text-base sm:text-lg font-black text-rose-600">
-                ~{formatNgn(estimatedLostRevenue)}
-              </p>
-            </div>
-          </div>
-
-          {/* Lapsed Customers Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {lapsedCustomers.map((cust) => {
-              const firstName = cust.full_name ? cust.full_name.split(' ')[0] : 'Valued Customer';
-              const waMessage = `Hello ${firstName}! It's ${activeBusiness.name}. We noticed it's been a while since your last visit. We'd love to see you this week — show this message for a special VIP perk on your next visit! Would you like us to save a slot for you?`;
-              const waUrl = getWhatsAppUrl(cust.phone || '', waMessage);
-
-              return (
-                <div
-                  key={cust.id}
-                  className="p-3.5 bg-rose-50/40 rounded-xl border border-rose-200/80 flex flex-col justify-between gap-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="font-bold text-sm text-slate-900">{cust.full_name}</h4>
-                      <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                        <span className="text-rose-700 font-semibold flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          Last seen: {formatRelativeTime(cust.last_visit_date)}
-                        </span>
-                        <span>•</span>
-                        <span>{cust.total_visits || 1} past visits</span>
-                      </div>
-                    </div>
-                    <span className="text-xs font-extrabold text-slate-800 bg-white px-2 py-1 rounded-lg border border-rose-200">
-                      {formatNgn(cust.total_spent_ngn)} spent
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-rose-100">
-                    <span className="text-[11px] text-slate-500 font-mono">{cust.phone}</span>
-                    <a
-                      href={waUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      <span>1-Tap WhatsApp Re-invite</span>
-                    </a>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       )}
 
-      {/* 🚀 RETAINNG IMPACT & REVENUE ROI CARD */}
-      <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white rounded-2xl p-5 border border-slate-800 shadow-md">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      {/* ━━━ AGENCY ROI PROOF BANNER ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <div className="bg-gradient-to-r from-emerald-900 via-emerald-950 to-slate-950 border border-emerald-800/60 rounded-2xl p-5 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-[0.04]"
+          style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '24px 24px' }}
+        />
+        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-lg bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center">
-                ₦
-              </span>
-              <h3 className="font-extrabold text-base text-white tracking-tight">
-                RetainNG Impact: Customer Value Delivered
-              </h3>
-              <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full">
-                Direct Business ROI
-              </span>
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+              <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Agency ROI Proof</span>
             </div>
-            <p className="text-xs text-slate-300 mt-1 max-w-xl">
-              Real-time calculation of revenue generated from repeat customers who kept returning to your business.
+            <h3 className="text-base font-black text-white leading-tight">
+              Your AI is protecting{' '}
+              <span className="text-emerald-400">{formatNgn(globalMetrics.totalLapsedValue)}</span>
+              {' '}in at-risk revenue
+            </h3>
+            <p className="text-xs text-emerald-200/60 mt-1">
+              {globalMetrics.totalLapsed} customers detected as lapsed. AI queuing re-engagement across all {globalMetrics.totalClients} clients.
             </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-emerald-300 font-bold bg-emerald-950 border border-emerald-800 px-3 py-1.5 rounded-xl">
-              ⚡ {repeatRate}% Retention Rate (vs 22% Nigerian SME benchmark)
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
-          <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-              Repeat Customer Revenue
-            </span>
-            <p className="text-2xl sm:text-3xl font-black text-emerald-400 mt-1">
-              {formatNgn(repeatRevenueNgn)}
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1.5">
-              From {repeatCustomers} loyal regulars with 2+ visits
-            </p>
-          </div>
-
-          <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-              At-Risk Revenue Protected
-            </span>
-            <p className="text-2xl sm:text-3xl font-black text-rose-400 mt-1">
-              {formatNgn(estimatedLostRevenue)}
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1.5">
-              {lapsedCustomers.length} inactive regulars ready for WhatsApp recovery
-            </p>
-          </div>
-
-          <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-              Customer Opt-In Base
-            </span>
-            <p className="text-2xl sm:text-3xl font-black text-amber-400 mt-1">
-              {consentedCustomers} Clients
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1.5">
-              {consentedPct}% have agreed to receive special offers
-            </p>
-          </div>
+          <Link
+            href="/campaigns"
+            className="shrink-0 flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white font-black text-xs rounded-xl transition shadow-md shadow-emerald-900/40"
+          >
+            <Bot className="w-4 h-4" />
+            Open AI Command Center
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
       </div>
 
-      {/* Metric Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Total Customers */}
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover:shadow-xs transition">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Total Customers
+      {/* ━━━ WHAT WE DELIVER (PITCH CARD) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {[
+          {
+            icon: '🤖',
+            title: 'Full Autopilot',
+            desc: 'AI monitors visit cadence 24/7 and queues personalized re-engagement — zero staff effort after setup.',
+            tag: 'Zero Maintenance',
+            tagColor: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+          },
+          {
+            icon: '🎯',
+            title: 'Industry Playbooks',
+            desc: 'Pharmacy refill reminders. Barber biweekly triggers. Salon style-refresh nudges. Each client gets its own AI strategy.',
+            tag: 'Business-Specific',
+            tagColor: 'bg-sky-50 text-sky-800 border-sky-200',
+          },
+          {
+            icon: '📊',
+            title: 'Proof of Delivery',
+            desc: 'Revenue protected, customers recovered, campaigns dispatched. Every result tracked so clients never question the ROI.',
+            tag: 'Measurable Results',
+            tagColor: 'bg-amber-50 text-amber-800 border-amber-200',
+          },
+        ].map(card => (
+          <div key={card.title} className="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-sm hover:border-slate-300 transition">
+            <div className="text-2xl mb-2">{card.icon}</div>
+            <div className="font-extrabold text-sm text-slate-900 mb-1">{card.title}</div>
+            <p className="text-xs text-slate-500 leading-relaxed mb-3">{card.desc}</p>
+            <span className={`text-[10px] font-bold px-2 py-0.5 border rounded-full ${card.tagColor}`}>
+              {card.tag}
             </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Users className="w-4 h-4" />
-            </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900 mt-2">
-            {totalCustomers}
-          </p>
-          <div className="flex items-center gap-1.5 mt-2 text-[11px] text-slate-500">
-            <Link href="/customers" className="text-blue-600 hover:underline font-medium">
-              View customer list →
-            </Link>
-          </div>
-        </div>
-
-        {/* Consented for Follow-ups */}
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover:shadow-xs transition">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Marketing Consented
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <UserCheck className="w-4 h-4" />
-            </div>
-          </div>
-          <p className="text-2xl sm:text-3xl font-black text-emerald-700 mt-2">
-            {consentedCustomers}
-          </p>
-          <div className="flex items-center gap-1 mt-2 text-[11px] text-slate-500">
-            <span className="font-semibold text-emerald-700">{consentedPct}%</span>
-            <span>ready for WhatsApp offers</span>
-          </div>
-        </div>
-
-        {/* Repeat Rate */}
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover:shadow-xs transition">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Repeat Visitors
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Repeat className="w-4 h-4" />
-            </div>
-          </div>
-          <p className="text-2xl sm:text-3xl font-black text-purple-700 mt-2">
-            {repeatCustomers}
-          </p>
-          <div className="flex items-center gap-1 mt-2 text-[11px] text-slate-500">
-            <span className="font-semibold text-purple-700">{repeatRate}%</span>
-            <span>have returned 2+ times</span>
-          </div>
-        </div>
-
-        {/* Recorded Sales Volume */}
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover:shadow-xs transition">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Recorded Sales
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Receipt className="w-4 h-4" />
-            </div>
-          </div>
-          <p className="text-xl sm:text-2xl font-black text-slate-900 mt-2 truncate">
-            {formatNgn(totalRevenueNgn)}
-          </p>
-          <div className="flex items-center gap-1 mt-2 text-[11px] text-slate-500">
-            <span>Across</span>
-            <span className="font-semibold text-slate-800">{totalVisits} recorded visits</span>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Main Two-Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Recent Activity & Visit Feed */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-sm sm:text-base text-slate-900">
-                  Recent Visits & Sales
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Recorded transactions and customer visits
-                </p>
-              </div>
-              <Link
-                href="/sales"
-                className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
-              >
-                <span>View all ({sales.length})</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            {recentSales.length === 0 ? (
-              <div className="p-8 text-center">
-                <Receipt className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-700">No visits recorded yet</p>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Recording a customer visit takes 3 seconds with the rapid counter above.
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {recentSales.map((sale) => (
-                  <div
-                    key={sale.id}
-                    className="p-3.5 sm:p-4 hover:bg-slate-50/80 transition flex items-center justify-between gap-3 cursor-pointer"
-                    onClick={() => openCustomerDetail(sale.customer_id)}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center shrink-0 border border-slate-200">
-                        {sale.customer_name?.charAt(0) || 'C'}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-slate-900 truncate">
-                            {sale.customer_name || 'Customer'}
-                          </p>
-                          <span className="text-[11px] text-slate-500 hidden sm:inline">
-                            {formatRelativeTime(sale.visit_date)}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-600 truncate mt-0.5">
-                          {sale.service_or_product || 'General Visit'}
-                          {sale.notes ? ` • ${sale.notes}` : ''}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-extrabold text-slate-900">
-                        {formatNgn(sale.amount_ngn)}
-                      </p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        {formatDate(sale.visit_date)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right 1 Col: Zero-Effort Counter Stand & Staff Shift Summary */}
-        <div className="space-y-4">
-          {/* ZERO EFFORT COUNTER STAND CARD */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 text-white rounded-2xl p-5 border border-slate-800 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" />
-                Zero Staff Typing
-              </span>
-              <QrCode className="w-5 h-5 text-emerald-400" />
-            </div>
-            <h4 className="text-base font-bold text-white">
-              Let Customers Check In Themselves
-            </h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Place your printed counter stand or a tablet at your payment desk. Customers scan or tap their phone number to check in. Their visit and marketing consent are logged automatically without staff lifting a finger!
-            </p>
-            <div className="pt-1 flex flex-col gap-2">
-              <Link
-                href={`/kiosk/${activeBusiness.opt_in_slug}`}
-                target="_blank"
-                className="w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 text-center"
-              >
-                <Tablet className="w-4 h-4 text-slate-950" />
-                <span>📱 Open Counter Tablet Mode</span>
-              </Link>
-
-              <button
-                onClick={() => openQrModal(true)}
-                className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-4 h-4" />
-                <span>🖨️ View & Print Counter Stand</span>
-              </button>
-
-              <Link
-                href={`/opt-in/${activeBusiness.opt_in_slug}`}
-                target="_blank"
-                className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl transition text-center"
-              >
-                Test Customer Form →
-              </Link>
-            </div>
-          </div>
-
-          {/* Today's Shift Tally (Works for Salary & Commission) */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-[10px] text-amber-700 font-bold uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                  Staff Accountability
-                </span>
-                <h4 className="font-bold text-sm text-slate-900 mt-1">Today&apos;s Shift Tally</h4>
-              </div>
-              <button
-                onClick={() => setIsDailyShiftOpen(true)}
-                className="text-xs text-emerald-700 hover:underline font-semibold"
-              >
-                View ledger →
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-center p-3 bg-slate-50 rounded-xl border border-slate-200">
-              <div>
-                <span className="text-[10px] text-slate-500 font-semibold">Today&apos;s Clients</span>
-                <p className="text-xl font-black text-slate-900 mt-0.5">{todaySales.length}</p>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 font-semibold">Logged Volume</span>
-                <p className="text-xl font-black text-emerald-700 mt-0.5">{formatNgn(todayRevenueNgn)}</p>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              💡 Works for both fixed-salary teams and commission-split staff. Tap &quot;View ledger&quot; to review or export today&apos;s shift count.
-            </p>
-          </div>
-
-          {/* Retention Segments Teaser */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="font-bold text-sm text-slate-900">Follow-up Segments</h4>
-              <Link href="/segments" className="text-xs text-emerald-700 hover:underline font-semibold">
-                View all →
-              </Link>
-            </div>
-            <p className="text-xs text-slate-500">
-              Targeted customer groups for WhatsApp re-engagement:
-            </p>
-
-            <div className="space-y-2">
-              <Link
-                href="/campaigns?segment=inactive_30d"
-                className="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30 transition flex items-center justify-between text-xs"
-              >
-                <div>
-                  <p className="font-semibold text-slate-800">Lapsed (30+ Days Away)</p>
-                  <p className="text-[11px] text-slate-500">Past clients who haven&apos;t visited</p>
-                </div>
-                <Send className="w-3.5 h-3.5 text-slate-400" />
-              </Link>
-
-              <Link
-                href="/campaigns?segment=frequent_visitors"
-                className="p-2.5 rounded-xl border border-slate-200 hover:border-purple-300 hover:bg-purple-50/30 transition flex items-center justify-between text-xs"
-              >
-                <div>
-                  <p className="font-semibold text-slate-800">VIP & Regulars (3+ Visits)</p>
-                  <p className="text-[11px] text-slate-500">Reward your most loyal customers</p>
-                </div>
-                <Send className="w-3.5 h-3.5 text-slate-400" />
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Daily Shift & Commission Modal */}
-      <DailyShiftModal
-        isOpen={isDailyShiftOpen}
-        onClose={() => setIsDailyShiftOpen(false)}
-      />
-
-      {/* Staff Camera / Barcode Scanner Modal */}
-      <CameraScannerModal
-        isOpen={isCameraScannerOpen}
-        onClose={() => setIsCameraScannerOpen(false)}
-        onSuccess={refreshData}
-      />
     </div>
   );
 }
