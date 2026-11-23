@@ -19,6 +19,12 @@ import {
   ExternalLink,
   Users,
   Settings,
+  DollarSign,
+  CreditCard,
+  Receipt,
+  MessageCircle,
+  FileText,
+  Check,
 } from 'lucide-react';
 
 const BIZ_ICONS: Record<string, string> = {
@@ -36,6 +42,8 @@ export default function AgencyRadarPage() {
   const mounted = useIsMounted();
   const [selectedBiz, setSelectedBiz] = useState<string>('all');
   const [syncVersion, setSyncVersion] = useState(0);
+  const [radarView, setRadarView] = useState<'client_impact' | 'agency_mrr'>('client_impact');
+  const [subFilter, setSubFilter] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all');
 
   useEffect(() => {
     const handleSync = () => setSyncVersion((v) => v + 1);
@@ -47,6 +55,23 @@ export default function AgencyRadarPage() {
     if (!mounted) return [];
     return getBusinesses();
   }, [mounted, syncVersion]);
+
+  // Agency Retainer MRR calculations
+  const agencyMRR = useMemo(() => {
+    return allBusinesses.reduce((acc, b) => acc + (b.monthly_retainer_ngn || 25000), 0);
+  }, [allBusinesses]);
+
+  const paidSubscribersCount = useMemo(() => {
+    return allBusinesses.filter((b) => (b.subscription_status || 'active') === 'active').length;
+  }, [allBusinesses]);
+
+  const filteredSubscribers = useMemo(() => {
+    if (subFilter === 'all') return allBusinesses;
+    if (subFilter === 'paid') return allBusinesses.filter((b) => (b.subscription_status || 'active') === 'active');
+    if (subFilter === 'pending') return allBusinesses.filter((b) => b.subscription_status === 'pending');
+    if (subFilter === 'overdue') return allBusinesses.filter((b) => b.subscription_status === 'overdue');
+    return allBusinesses;
+  }, [allBusinesses, subFilter]);
 
   // Aggregate metrics across entire fleet or a single business
   const data = useMemo(() => {
@@ -170,148 +195,311 @@ export default function AgencyRadarPage() {
         </div>
       </div>
 
-      {/* ━━ 3. THE 3 NUMBERS THAT PROVE YOUR VALUE ━━━━━━━━━━━━━━━━━━━━━ */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Repeat Orders Handled
-            </span>
-            <Bot className="w-4 h-4 text-emerald-600" />
-          </div>
-          <p className="text-3xl font-black text-slate-900 leading-none">
-            {data.totalRefills}
-          </p>
-          <p className="text-xs text-slate-500 pt-1">
-            Fulfilled via WhatsApp without staff effort
-          </p>
-        </div>
-
-        <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Protected Client Revenue
-            </span>
-            <TrendingUp className="w-4 h-4 text-emerald-600" />
-          </div>
-          <p className="text-3xl font-black text-emerald-600 leading-none">
-            {formatNgn(data.totalProtectedRevenue)}
-          </p>
-          <p className="text-xs text-slate-500 pt-1">
-            Repeat sales saved from competitors
-          </p>
-        </div>
-
-        <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Staff Labor Required
-            </span>
-            <Clock className="w-4 h-4 text-amber-500" />
-          </div>
-          <p className="text-3xl font-black text-slate-900 leading-none">
-            0 hrs
-          </p>
-          <p className="text-xs text-slate-500 pt-1">
-            100% Bag Slip QR + WhatsApp Autopilot
-          </p>
-        </div>
+      {/* ━━ 2b. VIEW TOGGLE (CLIENT IMPACT vs AGENCY REVENUE) ━━━━━━━━━━━ */}
+      <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-fit">
+        <button
+          onClick={() => setRadarView('client_impact')}
+          className={`px-4 py-2 text-xs font-bold rounded-xl transition ${
+            radarView === 'client_impact'
+              ? 'bg-slate-900 text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          📊 Client Impact
+        </button>
+        <button
+          onClick={() => setRadarView('agency_mrr')}
+          className={`px-4 py-2 text-xs font-bold rounded-xl transition flex items-center gap-1.5 ${
+            radarView === 'agency_mrr'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <DollarSign className="w-3.5 h-3.5" />
+          Agency Revenue
+        </button>
       </div>
 
-      {/* ━━ 4. WHAT THE AI HAS DONE & WHAT IT WILL DO NEXT ━━━━━━━━━━━━━━ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* WHAT AI HAS DONE */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <h2 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                What AI Has Done (Live Activity)
-              </h2>
+      {/* ━━ AGENCY MRR ANALYTICS VIEW ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      {radarView === 'agency_mrr' && (
+        <div className="space-y-4">
+          {/* Revenue summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-4 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Monthly MRR</span>
+                <DollarSign className="w-4 h-4 text-emerald-600" />
+              </div>
+              <p className="text-2xl font-black text-emerald-600 leading-none">{formatNgn(agencyMRR)}</p>
+              <p className="text-xs text-slate-500 pt-0.5">Retainer income / month</p>
             </div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase">Live Feed</span>
+
+            <div className="p-4 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Annual Run Rate</span>
+                <TrendingUp className="w-4 h-4 text-blue-500" />
+              </div>
+              <p className="text-2xl font-black text-slate-900 leading-none">{formatNgn(agencyMRR * 12)}</p>
+              <p className="text-xs text-slate-500 pt-0.5">Projected ARR</p>
+            </div>
+
+            <div className="p-4 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Partners</span>
+                <Check className="w-4 h-4 text-emerald-600" />
+              </div>
+              <p className="text-2xl font-black text-slate-900 leading-none">{paidSubscribersCount}</p>
+              <p className="text-xs text-slate-500 pt-0.5">Paid subscribers</p>
+            </div>
+
+            <div className="p-4 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Partners</span>
+                <Building2 className="w-4 h-4 text-slate-500" />
+              </div>
+              <p className="text-2xl font-black text-slate-900 leading-none">{allBusinesses.length}</p>
+              <p className="text-xs text-slate-500 pt-0.5">On platform</p>
+            </div>
           </div>
 
-          <div className="space-y-2 max-h-80 overflow-y-auto">
-            {data.recentActivity.length === 0 ? (
-              <div className="text-center py-8 text-xs text-slate-400">
-                No refill orders logged yet. As patients scan bag slips and text the bot, their orders appear here!
+          {/* Subscriber management table */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-black text-slate-900">Subscriber Management</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Track retainers, subscription status, and partner health</p>
               </div>
-            ) : (
-              data.recentActivity.map((act) => (
-                <div
-                  key={act.id}
-                  className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between text-xs"
-                >
-                  <div className="min-w-0 pr-2">
-                    <div className="font-bold text-slate-900 truncate">
-                      {act.customerName}
-                    </div>
-                    <div className="text-[11px] text-slate-500 truncate">
-                      {act.service} • <span className="text-slate-400">{act.businessName}</span>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full block">
-                      Fulfilled
-                    </span>
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">
-                      {formatRelativeTime(act.date)}
-                    </span>
-                  </div>
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                {(['all', 'paid', 'pending', 'overdue'] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setSubFilter(f)}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition capitalize ${
+                      subFilter === f
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {f === 'paid' ? 'Active (Paid)' : f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {filteredSubscribers.length === 0 ? (
+                <div className="py-10 text-center text-xs text-slate-400">
+                  No partners match this filter.
                 </div>
-              ))
-            )}
+              ) : (
+                filteredSubscribers.map((biz) => {
+                  const status = biz.subscription_status || 'active';
+                  const retainer = biz.monthly_retainer_ngn || 25000;
+                  const badgeColor =
+                    status === 'active'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : status === 'pending'
+                      ? 'bg-amber-100 text-amber-800'
+                      : status === 'overdue'
+                      ? 'bg-rose-100 text-rose-800'
+                      : 'bg-blue-100 text-blue-800';
+
+                  return (
+                    <div
+                      key={biz.id}
+                      className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/60 transition"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="text-xl p-2 bg-slate-100 rounded-xl shrink-0">
+                          {BIZ_ICONS[biz.business_type] || '🏪'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-extrabold text-sm text-slate-900 truncate">{biz.name}</div>
+                          <div className="text-xs text-slate-400 capitalize">{biz.business_type} · {biz.city || 'Nigeria'}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">
+                        <div className="text-right">
+                          <div className="text-sm font-black text-slate-900">{formatNgn(retainer)}/mo</div>
+                          {biz.subscription_renewal_date && (
+                            <div className="text-[10px] text-slate-400">Renews {biz.subscription_renewal_date}</div>
+                          )}
+                        </div>
+
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full capitalize ${badgeColor}`}>
+                          {status === 'active' ? '✓ Active' : status === 'pending' ? '⏳ Pending' : status === 'overdue' ? '⚠️ Overdue' : '🔵 Trial'}
+                        </span>
+
+                        <Link
+                          href={`/settings?biz=${biz.id}`}
+                          onClick={() => setActiveBusiness(biz.id)}
+                          className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition border border-slate-200"
+                          title="Manage Partner"
+                        >
+                          <Settings className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50/60 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>💡 Set retainer amounts &amp; renewal dates in each partner&apos;s Settings</span>
+              <span className="font-bold text-slate-700">{filteredSubscribers.length} partner{filteredSubscribers.length !== 1 ? 's' : ''} shown</span>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* WHAT AI WILL DO NEXT */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-500" />
-              <h2 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                What AI Will Do Next (Autonomous Queue)
-              </h2>
+      {/* ━━ 3. THE 3 NUMBERS THAT PROVE YOUR VALUE ━━━━━━━━━━━━━━━━━━━━━ */}
+      {radarView === 'client_impact' && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Repeat Orders Handled
+                </span>
+                <Bot className="w-4 h-4 text-emerald-600" />
+              </div>
+              <p className="text-3xl font-black text-slate-900 leading-none">
+                {data.totalRefills}
+              </p>
+              <p className="text-xs text-slate-500 pt-1">
+                Fulfilled via WhatsApp without staff effort
+              </p>
             </div>
-            <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 font-bold px-2 py-0.5 rounded-full uppercase">
-              Automated
-            </span>
+
+            <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Protected Client Revenue
+                </span>
+                <TrendingUp className="w-4 h-4 text-emerald-600" />
+              </div>
+              <p className="text-3xl font-black text-emerald-600 leading-none">
+                {formatNgn(data.totalProtectedRevenue)}
+              </p>
+              <p className="text-xs text-slate-500 pt-1">
+                Repeat sales saved from competitors
+              </p>
+            </div>
+
+            <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Staff Labor Required
+                </span>
+                <Clock className="w-4 h-4 text-amber-500" />
+              </div>
+              <p className="text-3xl font-black text-slate-900 leading-none">
+                0 hrs
+              </p>
+              <p className="text-xs text-slate-500 pt-1">
+                100% QR Touchpoints + WhatsApp Autopilot
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-2.5">
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                <span>⏱️ Tomorrow at 9:00 AM WAT</span>
-                <span className="text-[10px] text-emerald-600 font-bold">Cron Scheduled</span>
+          {/* ━━ 4. WHAT THE AI HAS DONE & WHAT IT WILL DO NEXT ━━━━━━━━━━━━━━ */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* WHAT AI HAS DONE */}
+            <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <h2 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                    What AI Has Done (Live Activity)
+                  </h2>
+                </div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase">Live Feed</span>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Scan patient records for 25-day chronic refill reminders (BP, Metformin, Ulcer) and 4-day acute wellness check-ins.
-              </p>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {data.recentActivity.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-slate-400">
+                    No repeat orders logged yet. As clients and patients scan QR slips and text the bot, their orders appear here!
+                  </div>
+                ) : (
+                  data.recentActivity.map((act) => (
+                    <div
+                      key={act.id}
+                      className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between text-xs"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="font-bold text-slate-900 truncate">
+                          {act.customerName}
+                        </div>
+                        <div className="text-[11px] text-slate-500 truncate">
+                          {act.service} • <span className="text-slate-400">{act.businessName}</span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full block">
+                          Fulfilled
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-0.5 block">
+                          {formatRelativeTime(act.date)}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                <span>📅 1st of Next Month at 9:00 AM</span>
-                <span className="text-[10px] text-emerald-600 font-bold">Executive Report</span>
+            {/* WHAT AI WILL DO NEXT */}
+            <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  <h2 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                    What AI Will Do Next (Autonomous Queue)
+                  </h2>
+                </div>
+                <span className="text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 font-bold px-2 py-0.5 rounded-full uppercase">
+                  Automated
+                </span>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Compile total protected repeat revenue and send monthly WhatsApp Executive Reports &amp; ₦25,000 management invoices to owners.
-              </p>
-            </div>
 
-            <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-1">
-              <div className="flex items-center justify-between text-xs font-bold text-emerald-950">
-                <span>🛡️ Continuous 24/7 Watchdog</span>
-                <span className="text-[10px] text-emerald-700 font-black">Active</span>
+              <div className="space-y-2.5">
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                    <span>⏱️ Tomorrow at 9:00 AM WAT</span>
+                    <span className="text-[10px] text-emerald-600 font-bold">Cron Scheduled</span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Scan customer records for 25-day chronic refills, hair touch-ups, or service return cycle triggers.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                    <span>📅 1st of Next Month at 9:00 AM</span>
+                    <span className="text-[10px] text-emerald-600 font-bold">Executive Report</span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Compile total protected repeat revenue and send monthly WhatsApp Executive Reports &amp; ₦25,000 management invoices to owners.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-1">
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-950">
+                    <span>🛡️ Continuous 24/7 Watchdog</span>
+                    <span className="text-[10px] text-emerald-700 font-black">Active</span>
+                  </div>
+                  <p className="text-xs text-emerald-800 leading-relaxed">
+                    Listens on Green-API webhook for new QR slip scans, natural Nigerian Pidgin refill messages, and manager dispatch pings.
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-emerald-800 leading-relaxed">
-                Listens on Green-API webhook for new QR slip scans, natural Nigerian Pidgin refill messages, and manager dispatch pings.
-              </p>
             </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* ━━ 5. PARTNER BUSINESS FLEET & BAG SLIPS ━━━━━━━━━━━━━━━━━━━━━ */}
       <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4">
@@ -393,7 +581,7 @@ export default function AgencyRadarPage() {
                   </button>
 
                   <Link
-                    href="/settings"
+                    href={`/settings?biz=${biz.id}`}
                     onClick={() => setActiveBusiness(biz.id)}
                     title="Manage / Configure Partner"
                     className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer border border-slate-200"

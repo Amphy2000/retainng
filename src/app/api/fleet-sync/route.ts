@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'update_business') {
       const { id, updates } = payload;
-      const { data, error } = await supabaseAdmin
+      let res = await supabaseAdmin
         .from('businesses')
         .update({
           ...updates,
@@ -76,11 +76,26 @@ export async function POST(req: NextRequest) {
         .select()
         .single();
 
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 400 });
+      // If new subscription columns don't exist yet in Supabase schema, fall back safely
+      if (res.error && (res.error.message.includes('column') || res.error.code === '42703')) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { monthly_retainer_ngn, subscription_status, subscription_renewal_date, ...standardUpdates } = updates;
+        res = await supabaseAdmin
+          .from('businesses')
+          .update({
+            ...standardUpdates,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id)
+          .select()
+          .single();
       }
 
-      return NextResponse.json({ success: true, business: data });
+      if (res.error) {
+        return NextResponse.json({ error: res.error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ success: true, business: res.data });
     }
 
     if (action === 'create_customer') {

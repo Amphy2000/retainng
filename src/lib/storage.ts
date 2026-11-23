@@ -32,7 +32,7 @@ const STORAGE_KEYS = {
 };
 
 // Bump this whenever the data shape changes in a breaking way
-const CURRENT_SCHEMA_VERSION = '6';
+const CURRENT_SCHEMA_VERSION = '8';
 
 // Safe localStorage access helper
 function getStored<T>(key: string, fallback: T): T {
@@ -99,14 +99,25 @@ export function initLocalStorage(): void {
 // ----------------------------------------------------------------------------
 export function getBusinesses(): Business[] {
   initLocalStorage();
-  return getStored<Business[]>(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
+  const raw = getStored<Business[]>(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
+  // Auto-clean any legacy fake IDs (e.g. biz_lekki_barber) so all devices only keep authentic cloud UUID businesses
+  const cleaned = raw.filter((b) => !b.id.startsWith('biz_'));
+  if (cleaned.length !== raw.length && cleaned.length > 0) {
+    setStored(STORAGE_KEYS.BUSINESSES, cleaned);
+    return cleaned;
+  }
+  return cleaned.length > 0 ? cleaned : raw;
 }
 
 export function getActiveBusiness(): Business {
   initLocalStorage();
   const businesses = getBusinesses();
-  const activeId = getStored<string>(STORAGE_KEYS.ACTIVE_BIZ_ID, businesses[0]?.id || 'biz_lekki_barber');
+  const activeId = getStored<string>(STORAGE_KEYS.ACTIVE_BIZ_ID, businesses[0]?.id || '');
   const found = businesses.find((b) => b.id === activeId);
+  if (!found && businesses.length > 0) {
+    setStored(STORAGE_KEYS.ACTIVE_BIZ_ID, businesses[0].id);
+    return businesses[0];
+  }
   return found || businesses[0] || INITIAL_BUSINESSES[0];
 }
 
@@ -218,53 +229,23 @@ export async function syncFleetFromCloud(): Promise<boolean> {
     const data = await res.json();
     if (!data.success) return false;
 
-    // 1. Merge cloud businesses
+    // 1. Authoritative Cloud Businesses (Supabase is the single source of truth)
     if (data.businesses && Array.isArray(data.businesses) && data.businesses.length > 0) {
-      const local = getStored<Business[]>(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
-      const merged: Business[] = [...local];
-      data.businesses.forEach((cloudBiz: Business) => {
-        const existingIdx = merged.findIndex(
-          (b) => b.id === cloudBiz.id || b.opt_in_slug === cloudBiz.opt_in_slug
-        );
-        if (existingIdx >= 0) {
-          merged[existingIdx] = { ...merged[existingIdx], ...cloudBiz };
-        } else {
-          merged.push(cloudBiz);
-        }
-      });
-      setStored(STORAGE_KEYS.BUSINESSES, merged);
+      setStored(STORAGE_KEYS.BUSINESSES, data.businesses);
+      const activeId = getStored<string>(STORAGE_KEYS.ACTIVE_BIZ_ID, '');
+      if (!data.businesses.some((b: Business) => b.id === activeId) && data.businesses.length > 0) {
+        setStored(STORAGE_KEYS.ACTIVE_BIZ_ID, data.businesses[0].id);
+      }
     }
 
-    // 2. Merge cloud customers
-    if (data.customers && Array.isArray(data.customers) && data.customers.length > 0) {
-      const localCusts = getStored<Customer[]>(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
-      const mergedCusts = [...localCusts];
-      data.customers.forEach((cloudCust: Customer) => {
-        const existingIdx = mergedCusts.findIndex(
-          (c) => c.id === cloudCust.id || (c.phone === cloudCust.phone && c.business_id === cloudCust.business_id)
-        );
-        if (existingIdx >= 0) {
-          mergedCusts[existingIdx] = { ...mergedCusts[existingIdx], ...cloudCust };
-        } else {
-          mergedCusts.unshift(cloudCust);
-        }
-      });
-      setStored(STORAGE_KEYS.CUSTOMERS, mergedCusts);
+    // 2. Authoritative Cloud Customers
+    if (data.customers && Array.isArray(data.customers)) {
+      setStored(STORAGE_KEYS.CUSTOMERS, data.customers);
     }
 
-    // 3. Merge cloud sales
-    if (data.sales && Array.isArray(data.sales) && data.sales.length > 0) {
-      const localSales = getStored<SaleOrVisit[]>(STORAGE_KEYS.SALES, INITIAL_SALES);
-      const mergedSales = [...localSales];
-      data.sales.forEach((cloudSale: SaleOrVisit) => {
-        const existingIdx = mergedSales.findIndex((s) => s.id === cloudSale.id);
-        if (existingIdx >= 0) {
-          mergedSales[existingIdx] = { ...mergedSales[existingIdx], ...cloudSale };
-        } else {
-          mergedSales.unshift(cloudSale);
-        }
-      });
-      setStored(STORAGE_KEYS.SALES, mergedSales);
+    // 3. Authoritative Cloud Sales
+    if (data.sales && Array.isArray(data.sales)) {
+      setStored(STORAGE_KEYS.SALES, data.sales);
     }
 
     window.dispatchEvent(new CustomEvent('retainng_fleet_synced'));

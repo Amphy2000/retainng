@@ -20,6 +20,7 @@ export type ConsentSource =
   | 'manual_edit';
 
 export type WhatsAppRoutingMode = 'agency_concierge' | 'store_direct';
+export type SubscriptionStatus = 'active' | 'pending' | 'overdue' | 'trial';
 
 export interface Business {
   id: string;
@@ -41,6 +42,10 @@ export interface Business {
   whatsapp_routing_mode?: WhatsAppRoutingMode;
   manager_alert_phone?: string;
   concierge_phone?: string;
+  // Agency Retainer & Subscription
+  monthly_retainer_ngn?: number;
+  subscription_status?: SubscriptionStatus;
+  subscription_renewal_date?: string;
 }
 
 export interface Customer {

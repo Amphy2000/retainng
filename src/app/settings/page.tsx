@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
-import { updateBusiness, createBusiness, resetDemoData, clearBusinessData, deleteBusiness } from '@/lib/storage';
-import { Business, BusinessType, WhatsAppRoutingMode } from '@/types';
+import { updateBusiness, createBusiness, resetDemoData, clearBusinessData, deleteBusiness, getBusinesses, setActiveBusiness } from '@/lib/storage';
+import { Business, BusinessType, WhatsAppRoutingMode, SubscriptionStatus } from '@/types';
 import { isSupabaseConfigured } from '@/lib/supabaseClient';
 import {
   ShieldCheck,
@@ -18,11 +19,16 @@ import {
   Smartphone,
   ArrowRight,
   Send,
+  Building2,
 } from 'lucide-react';
 import Link from 'next/link';
 
-export default function SettingsPage() {
+function SettingsContent() {
   const { activeBusiness, refreshData, openQrModal } = useApp();
+  const searchParams = useSearchParams();
+  const bizParam = searchParams.get('biz');
+
+  const [allBusinesses, setAllBusinesses] = useState<Business[]>([]);
 
   const [name, setName] = useState('');
   const [businessType, setBusinessType] = useState<BusinessType>('barber');
@@ -38,10 +44,33 @@ export default function SettingsPage() {
   const [managerAlertPhone, setManagerAlertPhone] = useState('');
   const [conciergePhone, setConciergePhone] = useState('+234 703 267 3310');
 
+  // Agency Retainer & Billing
+  const [monthlyRetainer, setMonthlyRetainer] = useState<number>(25000);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('active');
+  const [renewalDate, setRenewalDate] = useState<string>('');
+
   const [isSaved, setIsSaved] = useState(false);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [newBizName, setNewBizName] = useState('');
-  const [newBizType, setNewBizType] = useState<BusinessType>('salon');
+  const [newBizType, setNewBizType] = useState<BusinessType>('pharmacy');
+
+  // Load all businesses and support ?biz= query param
+  useEffect(() => {
+    const list = getBusinesses();
+    setAllBusinesses(list);
+
+    if (bizParam) {
+      const match = list.find((b) => b.id === bizParam || b.opt_in_slug === bizParam);
+      if (match && match.id !== activeBusiness?.id) {
+        setActiveBusiness(match.id);
+        refreshData();
+      }
+    }
+  }, [bizParam]);
+
+  useEffect(() => {
+    setAllBusinesses(getBusinesses());
+  }, [activeBusiness]);
 
   useEffect(() => {
     if (!activeBusiness) return;
@@ -51,18 +80,28 @@ export default function SettingsPage() {
       setPhone(activeBusiness.phone || '');
       setEmail(activeBusiness.email || '');
       setAddress(activeBusiness.address || '');
-      setCity(activeBusiness.city || 'Lagos');
-      setStateName(activeBusiness.state || 'Lagos');
+      setCity(activeBusiness.city || 'Kaduna');
+      setStateName(activeBusiness.state || 'Kaduna');
       setTimezone(activeBusiness.timezone || 'Africa/Lagos');
 
       setWhatsappRoutingMode(activeBusiness.whatsapp_routing_mode || 'agency_concierge');
       setManagerAlertPhone(activeBusiness.manager_alert_phone || activeBusiness.phone || '');
       setConciergePhone(activeBusiness.concierge_phone || '+234 703 267 3310');
+
+      setMonthlyRetainer(activeBusiness.monthly_retainer_ngn ?? 25000);
+      setSubscriptionStatus(activeBusiness.subscription_status ?? 'active');
+      setRenewalDate(activeBusiness.subscription_renewal_date || '');
     }, 0);
     return () => clearTimeout(timer);
   }, [activeBusiness]);
 
-  if (!activeBusiness) return null;
+  if (!activeBusiness) {
+    return (
+      <div className="py-20 text-center text-slate-500 text-xs">
+        Loading Partner Settings...
+      </div>
+    );
+  }
 
   function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -74,16 +113,17 @@ export default function SettingsPage() {
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
       address: address.trim() || undefined,
-      city: city.trim() || 'Lagos',
-      state: stateName.trim() || 'Lagos',
+      city: city.trim() || 'Kaduna',
+      state: stateName.trim() || 'Kaduna',
       timezone,
       whatsapp_routing_mode: whatsappRoutingMode,
       manager_alert_phone: managerAlertPhone.trim() || undefined,
       concierge_phone: conciergePhone.trim() || undefined,
+      monthly_retainer_ngn: Number(monthlyRetainer) || 25000,
+      subscription_status: subscriptionStatus,
+      subscription_renewal_date: renewalDate || undefined,
     });
 
-    // Sync manager phone to the server-side pharmacy config (used by WhatsApp webhook)
-    // This means zero manual env vars per pharmacy — ever.
     fetch('/api/pharmacy-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -93,7 +133,7 @@ export default function SettingsPage() {
         managerPhone: managerAlertPhone.trim(),
         conciergePhone: conciergePhone.trim(),
       }),
-    }).catch(() => {/* non-critical — config still works from memory */});
+    }).catch(() => {});
 
     setIsSaved(true);
     refreshData();
@@ -104,7 +144,7 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!newBizName.trim()) return;
 
-    createBusiness({
+    const created = createBusiness({
       name: newBizName.trim(),
       business_type: newBizType,
       city: 'Kaduna',
@@ -115,6 +155,7 @@ export default function SettingsPage() {
 
     setIsCreatingNew(false);
     setNewBizName('');
+    setActiveBusiness(created.id);
     refreshData();
   }
 
@@ -162,6 +203,49 @@ export default function SettingsPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Supabase Connected
           </span>
+        </div>
+      </div>
+
+      {/* Active Partner Selector Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg shrink-0">
+            <Building2 className="w-5 h-5 text-emerald-600" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
+              Currently Managing Partner
+            </span>
+            <span className="text-sm sm:text-base font-black text-slate-900 truncate block">
+              {activeBusiness.name}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <select
+            value={activeBusiness.id}
+            onChange={(e) => {
+              setActiveBusiness(e.target.value);
+              refreshData();
+            }}
+            className="text-xs font-bold px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer max-w-[220px]"
+          >
+            {allBusinesses.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setIsCreatingNew(!isCreatingNew)}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Add Partner</span>
+          </button>
         </div>
       </div>
 
@@ -353,6 +437,77 @@ export default function SettingsPage() {
                 value="Africa/Lagos (GMT+1)"
                 className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-600"
               />
+            </div>
+          </div>
+
+          {/* Agency Retainer & Subscription (Founder Controls) */}
+          <div className="p-4 sm:p-5 bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl border border-slate-800 space-y-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                  Founder Revenue Controls
+                </span>
+                <h4 className="text-sm font-bold text-white mt-1">Agency Retainer &amp; Subscription Billing</h4>
+                <p className="text-xs text-slate-400">
+                  Manage this client&apos;s monthly SaaS retainer, subscription standing, and renewal schedule.
+                </p>
+              </div>
+              <span className="text-xs font-bold text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800 px-3 py-1.5 rounded-xl">
+                ₦{Number(monthlyRetainer).toLocaleString()}/mo
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  Monthly Retainer (₦ NGN)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={monthlyRetainer}
+                  onChange={(e) => setMonthlyRetainer(Number(e.target.value))}
+                  placeholder="25000"
+                  className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-700 bg-slate-800 text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  Subscription Status
+                </label>
+                <select
+                  value={subscriptionStatus}
+                  onChange={(e) => setSubscriptionStatus(e.target.value as SubscriptionStatus)}
+                  className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-700 bg-slate-800 text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                >
+                  <option value="active">✓ Active (Paid Subscriber)</option>
+                  <option value="pending">⏳ Pending Payment</option>
+                  <option value="overdue">⚠️ Payment Overdue</option>
+                  <option value="trial">🔵 14-Day Free Pilot</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  Next Renewal Date
+                </label>
+                <input
+                  type="date"
+                  value={renewalDate}
+                  onChange={(e) => setRenewalDate(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-700 bg-slate-800 text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+              <span className="flex items-center gap-1.5 text-slate-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span>Flutterwave Auto-Debit Integration ready</span>
+              </span>
+              <span className="text-slate-500">Auto-billed on the 1st of every month</span>
             </div>
           </div>
 
@@ -674,5 +829,13 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="py-20 text-center text-slate-500 text-xs">Loading Settings...</div>}>
+      <SettingsContent />
+    </Suspense>
   );
 }
