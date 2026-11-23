@@ -108,6 +108,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, customer: data });
     }
 
+    if (action === 'delete_business') {
+      const { id } = payload;
+      const { error } = await supabaseAdmin
+        .from('businesses')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ success: true, deleted_id: id });
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   } catch (err: unknown) {
     console.error('Fleet sync POST error:', err);

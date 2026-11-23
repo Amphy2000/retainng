@@ -18,6 +18,7 @@ import {
   Zap,
   ExternalLink,
   Users,
+  Settings,
 } from 'lucide-react';
 
 const BIZ_ICONS: Record<string, string> = {
@@ -326,6 +327,26 @@ export default function AgencyRadarPage() {
             const icon = BIZ_ICONS[biz.business_type] || '🏪';
             const custCount = getCustomers(biz.id).length;
 
+            const isPharm = biz.business_type === 'pharmacy' || biz.business_type === 'clinic';
+            const isBarber = biz.business_type === 'barber' || biz.business_type === 'salon';
+            const isLaundry = biz.business_type === 'laundry';
+
+            const noun = isPharm ? 'patients' : isLaundry ? 'customers' : 'clients';
+            const slipTag = isPharm
+              ? '100% Bag Slip QR'
+              : isBarber
+              ? 'Mirror Stand Card'
+              : isLaundry
+              ? 'Laundry Bag Tag'
+              : 'Counter QR Slip';
+            const printBtnLabel = isPharm
+              ? 'Print 4-in-1 Slips'
+              : isBarber
+              ? 'Print Stand Card'
+              : isLaundry
+              ? 'Print Bag Tags'
+              : 'Print QR Slips';
+
             return (
               <div
                 key={biz.id}
@@ -341,9 +362,9 @@ export default function AgencyRadarPage() {
                       </span>
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5">
-                      <span>{custCount} patients onboarded</span>
+                      <span>{custCount} {noun} onboarded</span>
                       <span className="mx-1.5">•</span>
-                      <span className="text-emerald-600 font-semibold">100% Bag Slip QR</span>
+                      <span className="text-emerald-600 font-semibold">{slipTag}</span>
                     </div>
                   </div>
                 </div>
@@ -368,8 +389,17 @@ export default function AgencyRadarPage() {
                     className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer border border-emerald-200"
                   >
                     <QrCode className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Print 4-in-1 Slips</span>
+                    <span>{printBtnLabel}</span>
                   </button>
+
+                  <Link
+                    href="/settings"
+                    onClick={() => setActiveBusiness(biz.id)}
+                    title="Manage / Configure Partner"
+                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer border border-slate-200"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Link>
                 </div>
               </div>
             );

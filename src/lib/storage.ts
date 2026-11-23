@@ -172,6 +172,41 @@ export function updateBusiness(id: string, updates: Partial<Business>): Business
   return updated.find((b) => b.id === id) || businesses[0];
 }
 
+export function deleteBusiness(id: string): void {
+  const businesses = getBusinesses();
+  const remaining = businesses.filter((b) => b.id !== id);
+  setStored(STORAGE_KEYS.BUSINESSES, remaining);
+
+  if (remaining.length > 0) {
+    setActiveBusiness(remaining[0].id);
+  }
+
+  // Remove associated customer data
+  const customers = getStored<Customer[]>(STORAGE_KEYS.CUSTOMERS, []);
+  setStored(
+    STORAGE_KEYS.CUSTOMERS,
+    customers.filter((c) => c.business_id !== id)
+  );
+
+  // Remove associated sales records
+  const sales = getStored<SaleOrVisit[]>(STORAGE_KEYS.SALES, []);
+  setStored(
+    STORAGE_KEYS.SALES,
+    sales.filter((s) => s.business_id !== id)
+  );
+
+  // Sync deletion to Cloud Supabase
+  if (typeof window !== 'undefined') {
+    fetch('/api/fleet-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete_business', payload: { id } }),
+    }).catch((e) => console.warn('Cloud sync error on deleteBusiness:', e));
+
+    window.dispatchEvent(new CustomEvent('retainng_fleet_synced'));
+  }
+}
+
 // ----------------------------------------------------------------------------
 // CLOUD FLEET SYNCHRONIZATION (SUPABASE)
 // ----------------------------------------------------------------------------

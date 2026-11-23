@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { updateBusiness, createBusiness, resetDemoData, clearBusinessData } from '@/lib/storage';
+import { updateBusiness, createBusiness, resetDemoData, clearBusinessData, deleteBusiness } from '@/lib/storage';
 import { Business, BusinessType, WhatsAppRoutingMode } from '@/types';
 import { isSupabaseConfigured } from '@/lib/supabaseClient';
 import {
@@ -107,8 +107,8 @@ export default function SettingsPage() {
     createBusiness({
       name: newBizName.trim(),
       business_type: newBizType,
-      city: 'Lagos',
-      state: 'Lagos',
+      city: 'Kaduna',
+      state: 'Kaduna',
       currency: 'NGN',
       timezone: 'Africa/Lagos',
     });
@@ -116,6 +116,18 @@ export default function SettingsPage() {
     setIsCreatingNew(false);
     setNewBizName('');
     refreshData();
+  }
+
+  function handleDeleteBusiness() {
+    if (!activeBusiness) return;
+    const confirmPrompt = confirm(
+      `Are you sure you want to permanently remove "${activeBusiness.name}" from RetainNG?\n\nThis will remove their profile, touchpoint slips, and WhatsApp routing from the platform.`
+    );
+    if (confirmPrompt) {
+      deleteBusiness(activeBusiness.id);
+      refreshData();
+      alert(`"${activeBusiness.name}" was removed from your agency fleet.`);
+    }
   }
 
   return (
@@ -581,22 +593,31 @@ export default function SettingsPage() {
             )}
           </div>
 
-          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-            {isSaved ? (
-              <span className="text-xs font-bold text-emerald-700 flex items-center gap-1 animate-in fade-in">
-                <Check className="w-4 h-4" />
-                <span>Profile updated successfully!</span>
-              </span>
-            ) : (
-              <span />
-            )}
-
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
             <button
-              type="submit"
-              className="px-6 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md transition cursor-pointer"
+              type="button"
+              onClick={handleDeleteBusiness}
+              className="w-full sm:w-auto text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5 border border-rose-200 cursor-pointer"
             >
-              Save Profile
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Remove Partner from Fleet</span>
             </button>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              {isSaved && (
+                <span className="text-xs font-bold text-emerald-700 flex items-center gap-1 animate-in fade-in">
+                  <Check className="w-4 h-4" />
+                  <span>Profile updated!</span>
+                </span>
+              )}
+
+              <button
+                type="submit"
+                className="w-full sm:w-auto px-6 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md transition cursor-pointer"
+              >
+                Save Profile
+              </button>
+            </div>
           </div>
         </form>
       </div>
