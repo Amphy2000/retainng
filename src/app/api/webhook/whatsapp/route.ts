@@ -15,11 +15,13 @@ export async function POST(req: NextRequest) {
     const contentType = req.headers.get('content-type') || '';
     let fromNumber = '';
     let messageBody = '';
+    let profileName = '';
 
     if (contentType.includes('application/x-www-form-urlencoded')) {
       const formData = await req.formData();
       fromNumber = (formData.get('From') as string) || '';
       messageBody = (formData.get('Body') as string) || '';
+      profileName = (formData.get('ProfileName') as string) || '';
     } else {
       const json = await req.json();
       
@@ -41,6 +43,14 @@ export async function POST(req: NextRequest) {
         json?.messages?.[0]?.text?.body || // Whapi.cloud
         json?.data?.body || // UltraMsg
         '';
+
+      // Automatic WhatsApp Profile Name (e.g., "Alhaji Musa", "Hajiya Maryam", "Mama Chichi")
+      profileName =
+        json?.senderData?.senderName || // Green-API push name
+        json?.senderData?.chatName || // Green-API chat title
+        json?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name || // Meta Cloud API
+        json?.messages?.[0]?.from_name || // Whapi.cloud
+        '';
     }
 
     // Clean phone number (strip whatsapp:, @c.us, @s.whatsapp.net, +, spaces)
@@ -58,21 +68,26 @@ export async function POST(req: NextRequest) {
     // Default response message
     let replyText = '';
 
+    const nameGreeting = profileName ? ` ${profileName}` : '';
+
     if (incomingSlug) {
       // First-time scan from a bag slip or QR stand
       // Automatically binds the customer to this specific pharmacy forever
       replyText =
-        `🎉 *Welcome to your Pharmacy Care & Refill Concierge!*\n\n` +
+        `🎉 *Welcome${nameGreeting} to your Pharmacy Care & Refill Concierge!*\n\n` +
         `Your phone number (*...${cleanPhone.slice(-4)}*) is now linked to your pharmacy. ` +
         `You never need to type any codes or numbers again.\n\n` +
-        `Whenever your medication runs low, just send a message here: e.g. _"Please send my Amlodipine refill"_, ` +
+        (!profileName
+          ? `May I know your name so our pharmacist knows how to address you? (e.g. _Alhaji Musa_ or _Mama Chichi_)\n\n`
+          : '') +
+        `Whenever your medication runs low, just send a simple message here (e.g. _"Please send my Amlodipine refill"_), ` +
         `and our team will prepare it for pickup or home delivery! 💊\n\n` +
         `How can we support your health today?`;
     } else {
       // Subsequent chat or conversational message (zero codes typed by user)
       // The system recognizes the user by phone number from past records
       replyText =
-        `👋 *Hello! Welcome back to your Pharmacy Health Concierge.*\n\n` +
+        `👋 *Hello${nameGreeting}! Welcome back to your Pharmacy Health Concierge.*\n\n` +
         `We have your profile on file. How can we assist you today?\n\n` +
         `• *Refill:* Reply with your medication name (e.g. _"Refill my BP drugs"_)\n` +
         `• *Delivery:* Send your address for doorstep dispatch\n` +
