@@ -124,13 +124,13 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto print:static print:bg-white print:p-0 print:overflow-visible">
       <div
-        className="bg-white w-full max-w-md max-h-[92vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col my-auto overflow-hidden animate-in zoom-in-95 duration-100"
+        className="bg-white w-full max-w-md max-h-[92vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col my-auto overflow-hidden animate-in zoom-in-95 duration-100 print:shadow-none print:border-none print:max-w-none print:w-full print:m-0 print:max-h-none print:overflow-visible"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+        <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex items-center justify-between shrink-0 print:hidden">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
               <QrCode className="w-4 h-4" />
@@ -150,7 +150,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
         </div>
 
         {/* Destination Mode Selector */}
-        <div className="bg-slate-100 p-1.5 flex items-center gap-1.5 border-b border-slate-200 shrink-0">
+        <div className="bg-slate-100 p-1.5 flex items-center gap-1.5 border-b border-slate-200 shrink-0 print:hidden">
           <button
             type="button"
             onClick={() => setQrMode('web')}
@@ -177,9 +177,9 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
 
         {/* Content */}
         {showPrintCard ? (
-          <div className="p-4 sm:p-5 text-center space-y-3.5 overflow-y-auto flex-1">
+          <div className="p-4 sm:p-5 text-center space-y-3.5 overflow-y-auto flex-1 print:p-0 print:overflow-visible">
             {/* Print Format Toggle: Stand vs Bag Slips */}
-            <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
+            <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold print:hidden">
               <button
                 type="button"
                 onClick={() => setPrintLayout('stand')}
@@ -201,7 +201,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
             </div>
 
             {/* Customizable Incentive Hook Bar */}
-            <div className="text-left space-y-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+            <div className="text-left space-y-2 bg-slate-50 p-3 rounded-2xl border border-slate-200 print:hidden">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block">
                 Choose Customer Hook (No discount required!):
               </span>
@@ -263,7 +263,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
 
             {/* The Actual Printable Canvas */}
             {printLayout === 'stand' ? (
-              <div className="border-4 border-slate-900 rounded-3xl p-5 bg-white shadow-lg space-y-2.5 print:border-black print:m-0">
+              <div className="border-4 border-slate-900 rounded-3xl p-5 bg-white shadow-lg space-y-2.5 print:border-black print:m-0 print:shadow-none">
                 <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-black text-base flex items-center justify-center mx-auto">
                   ₦
                 </div>
@@ -298,34 +298,48 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
             ) : (
               /* 4-per-A4 Bag Slips Layout */
               <div className="space-y-2">
-                <p className="text-[11px] text-slate-500 font-medium text-left">
+                <p className="text-[11px] text-slate-500 font-medium text-left print:hidden">
                   ✂️ <strong>Prescription Bag Slips:</strong> Print and cut into 4 slips. Staff simply drops one slip into the patient&apos;s medicine bag at checkout. Zero staff typing!
                 </p>
-                <div className="grid grid-cols-2 gap-2 border-2 border-dashed border-slate-300 p-2 rounded-2xl bg-white print:border-none print:p-0">
+                <div className="grid grid-cols-2 gap-3 p-1 rounded-2xl bg-white print:grid-cols-2 print:gap-4 print:p-0">
                   {[1, 2, 3, 4].map((slip) => (
                     <div
                       key={slip}
-                      className="border border-slate-300 rounded-xl p-3 bg-slate-50/50 space-y-1.5 text-center print:border-black print:p-4"
+                      className="border-2 border-dashed border-slate-400 rounded-2xl p-4 bg-white space-y-2 text-center print:border-slate-800 print:p-5 flex flex-col justify-between"
                     >
-                      <div className="text-[11px] font-black uppercase text-slate-900 truncate">
-                        {business.name}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                          <span>✂ Cut Line</span>
+                          <span>Prescription Companion</span>
+                        </div>
+                        <div className="text-sm font-black uppercase tracking-tight text-slate-900 truncate">
+                          {business.name}
+                        </div>
+                        <div className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 inline-block">
+                          {customBadge}
+                        </div>
                       </div>
-                      <div className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 inline-block">
-                        {customBadge}
-                      </div>
-                      <p className="text-[9px] text-slate-600 line-clamp-2 leading-tight">
+
+                      <p className="text-[10px] text-slate-700 leading-tight font-medium px-1">
                         {customOfferText}
                       </p>
-                      {qrDataUrl && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={qrDataUrl}
-                          alt="Bag QR"
-                          className="w-20 h-20 mx-auto border border-slate-200 rounded p-1 bg-white"
-                        />
-                      )}
-                      <div className="text-[8px] text-slate-400 font-medium">
-                        Scan with camera or WhatsApp
+
+                      <div className="py-1">
+                        {qrDataUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={qrDataUrl}
+                            alt="Bag QR"
+                            className="w-24 h-24 mx-auto border border-slate-200 rounded-xl p-1 bg-white shadow-xs"
+                          />
+                        )}
+                        <div className="text-[9px] font-semibold text-slate-500 mt-1">
+                          Scan with Camera or WhatsApp
+                        </div>
+                      </div>
+
+                      <div className="text-[8px] text-slate-400 border-t border-slate-100 pt-1 font-medium">
+                        ✓ Free Patient Service • Keep with your meds
                       </div>
                     </div>
                   ))}
@@ -333,7 +347,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
               </div>
             )}
 
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 pt-1 print:hidden">
               <button
                 type="button"
                 onClick={() => setShowPrintCard(false)}
