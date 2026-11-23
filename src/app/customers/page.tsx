@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
-import { ConsentStatus } from '@/types';
-import { saveCustomer } from '@/lib/storage';
+import { ConsentStatus, Business } from '@/types';
+import { saveCustomer, getBusinesses, getCustomers, setActiveBusiness } from '@/lib/storage';
 import { ConsentBadge } from '@/components/ConsentBadge';
 import { CsvImportModal } from '@/components/CsvImportModal';
 import { formatNgn, formatRelativeTime, getWhatsAppUrl } from '@/lib/utils';
@@ -21,6 +21,8 @@ import {
   AlertCircle,
   X,
   MessageCircle,
+  Building2,
+  Filter,
 } from 'lucide-react';
 
 export default function CustomersPage() {
@@ -35,8 +37,32 @@ export default function CustomersPage() {
 
   const [search, setSearch] = useState('');
   const [filterConsent, setFilterConsent] = useState<'all' | 'consented' | 'unconfirmed' | 'opted_out'>('all');
+  const [selectedBizFilter, setSelectedBizFilter] = useState<string>('all');
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
+
+  // Load all businesses
+  const allBusinesses = useMemo(() => {
+    return getBusinesses();
+  }, []);
+
+  // Compute customers list based on fleet scope (All businesses vs single business)
+  const currentPool = useMemo(() => {
+    if (selectedBizFilter === 'all') {
+      // Aggregate across all businesses
+      const all: (typeof customers[0] & { business_name?: string })[] = [];
+      allBusinesses.forEach((b) => {
+        const bCusts = getCustomers(b.id);
+        bCusts.forEach((c) => all.push({ ...c, business_name: b.name }));
+      });
+      return all;
+    }
+    const b = allBusinesses.find((x) => x.id === selectedBizFilter);
+    return getCustomers(selectedBizFilter).map((c) => ({
+      ...c,
+      business_name: b?.name || '',
+    }));
+  }, [selectedBizFilter, allBusinesses, customers]);
 
   // Add Customer Form State
   const [name, setName] = useState('');
@@ -50,7 +76,7 @@ export default function CustomersPage() {
 
   // Filtered List
   const filteredCustomers = useMemo(() => {
-    return customers.filter((c) => {
+    return currentPool.filter((c) => {
       // Search match
       const query = search.toLowerCase().trim();
       const matchSearch =
@@ -65,13 +91,13 @@ export default function CustomersPage() {
 
       return matchSearch && matchConsent;
     });
-  }, [customers, search, filterConsent]);
+  }, [currentPool, search, filterConsent]);
 
   // Counts for quick tabs
-  const countAll = customers.length;
-  const countConsented = customers.filter((c) => c.consent_status === 'consented').length;
-  const countUnconfirmed = customers.filter((c) => c.consent_status === 'unconfirmed').length;
-  const countOptedOut = customers.filter((c) => c.consent_status === 'opted_out').length;
+  const countAll = currentPool.length;
+  const countConsented = currentPool.filter((c) => c.consent_status === 'consented').length;
+  const countUnconfirmed = currentPool.filter((c) => c.consent_status === 'unconfirmed').length;
+  const countOptedOut = currentPool.filter((c) => c.consent_status === 'opted_out').length;
 
   function handleCreateCustomer(e: React.FormEvent) {
     e.preventDefault();
@@ -169,6 +195,39 @@ export default function CustomersPage() {
 
       {/* Search & Consent Filter Tabs */}
       <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+        {/* Fleet Business Selector */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-emerald-600" />
+            <span className="text-xs font-bold text-slate-800">Filter by Business:</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => setSelectedBizFilter('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                selectedBizFilter === 'all'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
+            >
+              All Stores (Fleet Overview)
+            </button>
+            {allBusinesses.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => setSelectedBizFilter(b.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  selectedBizFilter === b.id
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                {b.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
           {/* Search Box */}
           <div className="relative w-full sm:w-80">

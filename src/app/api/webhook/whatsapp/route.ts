@@ -285,14 +285,13 @@ export async function POST(req: NextRequest) {
         `🎉 *Welcome${greeting} to ${bizDisplay} Care Concierge!*\n\n` +
         `Your phone number (*...${cleanPhone.slice(-4)}*) is now linked to ${bizDisplay}. ` +
         `You will *never need to scan or type a code again.* 💊\n\n` +
-        `Whenever your medication runs low, just message us here naturally — e.g. _"My BP drugs have finished"_ — ` +
-        `and our team will prepare it for pickup or home delivery!\n\n` +
-        `How can we support you today?`;
+        `To help our team remind you on time before your medications finish:\n` +
+        `👉 *What medication did you pick up today?* (e.g. _"BP drugs"_, _"Diabetes"_, _"Malaria"_, or _"Vitamins"_)\n\n` +
+        `Just reply here with the name, and we'll take care of the rest!`;
 
       await sendWhatsApp(cleanPhone, reply);
 
       // Alert the manager about the new patient onboarded!
-      // (Only send if manager's phone is DIFFERENT from the patient's phone)
       const managerPhone = await getManagerPhone(activeSlug, host);
       if (managerPhone && managerPhone !== cleanPhone) {
         const onboardAlert =
@@ -300,7 +299,7 @@ export async function POST(req: NextRequest) {
           `👤 *Patient:* ${profileName || 'Customer'} (WhatsApp: ...${cleanPhone.slice(-4)})\n` +
           `📱 *Phone:* +${cleanPhone}\n` +
           `✅ Linked via Prescription Bag Slip QR.\n` +
-          `⏱️ Next refill reminder clock started.`;
+          `⏱️ AI is actively profiling medication for automated reminder schedule.`;
 
         await sendWhatsApp(managerPhone, onboardAlert);
       }
@@ -321,11 +320,15 @@ Their phone ending in: ...${cleanPhone.slice(-4)}
 
 Your guidelines:
 1. Respond helpfully, warmly, and concisely in simple Nigerian English (using friendly natural phrasing).
-2. If they mention refills, medications (e.g. Amlodipine, Metformin, BP, diabetes): acknowledge their request warmly on behalf of ${activeBizName} and ask if they prefer home delivery or store pickup.
-3. If they provide a delivery address: confirm the address warmly and let them know the ${activeBizName} team is packaging it and will call them to confirm dispatch.
-4. If they ask clinical/service questions: give a clear, safe, accurate brief answer and invite them to speak with the pharmacist/manager if needed.
-5. NEVER repeat menus or say "reply 1 for this, reply 2 for that". Be human, conversational, empathetic, and attentive.
-6. Keep replies concise (under 80 words).
+2. If the user just states their medication name (e.g. "BP", "Amlodipine", "Metformin", "Malaria", "Vitamins"):
+   - For Chronic (BP, Diabetes, Heart, Ulcer): warmly confirm you have scheduled their reminder for 25 days before it finishes.
+   - For Acute (Malaria, Antibiotics, Cough, Typhoid): warmly wish them a speedy recovery and let them know you'll check in on them in 4 days to make sure they are feeling better.
+   - For Vitamins / Family Essentials: confirm you have set their 30-day reminder.
+3. If they mention refills, medications (e.g. Amlodipine, Metformin, BP, diabetes): acknowledge their request warmly on behalf of ${activeBizName} and ask if they prefer home delivery or store pickup.
+4. If they provide a delivery address: confirm the address warmly and let them know the ${activeBizName} team is packaging it and will call them to confirm dispatch.
+5. If they ask clinical/service questions: give a clear, safe, accurate brief answer and invite them to speak with the pharmacist/manager if needed.
+6. NEVER repeat menus or say "reply 1 for this, reply 2 for that". Be human, conversational, empathetic, and attentive.
+7. Keep replies concise (under 80 words).
 
 Important: If the patient is ordering or refilling a product/service, append this exact tag at the very end of your response on its own line:
 ORDER_DETECTED: [item or medication name]`;
