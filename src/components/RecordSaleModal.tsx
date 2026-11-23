@@ -101,9 +101,10 @@ export function RecordSaleModal({ isOpen, onClose, onSuccess, preselectedCustome
     e.preventDefault();
     setError(null);
 
-    const numAmount = Number(amount);
+    // Amount is completely optional — RetainNG is a retention engine, not a POS
+    const numAmount = amount.trim() ? Number(amount) : 0;
     if (isNaN(numAmount) || numAmount < 0) {
-      setError('Please enter a valid amount (0 or higher)');
+      setError('Please enter a valid amount or leave it blank');
       return;
     }
 
@@ -341,20 +342,22 @@ export function RecordSaleModal({ isOpen, onClose, onSuccess, preselectedCustome
 
           {/* Amount (NGN) */}
           <div>
-            <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider block mb-1">
-              Amount (₦ NGN) *
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                Amount (₦ NGN)
+              </label>
+              <span className="text-[11px] text-slate-400 font-normal">Optional · Zero POS conflict</span>
+            </div>
             <div className="relative">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-semibold text-base">
                 ₦
               </span>
               <input
                 type="number"
-                placeholder="5000"
+                placeholder="Leave blank or enter amount (e.g. 5000)"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full pl-8 pr-4 py-2.5 text-lg font-bold rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                required
+                className="w-full pl-8 pr-4 py-2.5 text-sm sm:text-base font-bold rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 min="0"
                 step="100"
               />

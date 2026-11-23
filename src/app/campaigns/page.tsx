@@ -8,8 +8,10 @@ import {
   getEligibleRecipients,
   getCampaignDrafts,
   saveCampaignDraft,
+  getBusinesses,
+  getCustomers,
 } from '@/lib/storage';
-import { CampaignDraft } from '@/types';
+import { CampaignDraft, Business, Customer } from '@/types';
 import { ConsentBadge } from '@/components/ConsentBadge';
 import { formatNgn, formatRelativeTime, getWhatsAppUrl } from '@/lib/utils';
 import {
@@ -33,7 +35,32 @@ import {
   HeartHandshake,
   Calendar,
   AlertTriangle,
+  Building2,
+  Layers,
 } from 'lucide-react';
+
+const BIZ_CADENCE: Record<string, number> = {
+  barber: 14,
+  salon: 21,
+  laundry: 10,
+  car_wash: 14,
+  boutique: 30,
+  pharmacy: 28,
+  clinic: 60,
+  other: 21,
+};
+
+const BIZ_ICONS: Record<string, string> = {
+  barber: '💈',
+  salon: '💅',
+  laundry: '🧺',
+  car_wash: '🚗',
+  boutique: '👗',
+  spa_wellness: '🧖',
+  pharmacy: '💊',
+  clinic: '🏥',
+  other: '🏪',
+};
 
 function CampaignContent() {
   const searchParams = useSearchParams();
@@ -45,6 +72,11 @@ function CampaignContent() {
   const [isAutopilotEnabled, setIsAutopilotEnabled] = useState(true);
   const [aiTone, setAiTone] = useState<'warm' | 'executive' | 'trendy'>('warm');
 
+  // Fleet Scope: 'all' = All businesses autonomously, or a specific biz id
+  const [fleetScope, setFleetScope] = useState<'all' | string>('all');
+  const [businesses, setBusinesses] = useState<Business[]>([]);
+  const [batchDispatched, setBatchDispatched] = useState(false);
+
   // Manual Studio State
   const [title, setTitle] = useState('Weekend Re-engagement Special');
   const [targetSegment, setTargetSegment] = useState(initialSegment);
@@ -55,6 +87,12 @@ function CampaignContent() {
   const [campaigns, setCampaigns] = useState<CampaignDraft[]>([]);
   const [isSimulatedSent, setIsSimulatedSent] = useState(false);
   const [previewTab, setPreviewTab] = useState<'eligible' | 'excluded'>('eligible');
+
+  useEffect(() => {
+    try {
+      setBusinesses(getBusinesses());
+    } catch {}
+  }, []);
 
   // Autopilot playbooks toggle
   const [playbooks, setPlaybooks] = useState({
@@ -93,38 +131,79 @@ function CampaignContent() {
     return getEligibleRecipients(activeBusiness.id, targetSegment, template);
   }, [activeBusiness, targetSegment, template, customers]);
 
-  // AI Queued Actions: Lapsed regular recovery
+  // AI Queued Actions across ALL client businesses or specific selected client
   const aiLapsedQueue = useMemo(() => {
     const now = new Date();
-    return customers
-      .filter((c) => {
-        if (!c.last_visit_date) return false;
-        const diffDays = Math.floor(
-          (now.getTime() - new Date(c.last_visit_date).getTime()) / (1000 * 60 * 60 * 24)
-        );
-        return diffDays >= 25 && c.consent_status === 'consented';
-      })
-      .map((c) => {
-        const firstName = c.full_name ? c.full_name.split(' ')[0] : 'Customer';
-        const bizName = activeBusiness?.name || 'our shop';
+    const targetBusinesses = fleetScope === 'all'
+      ? businesses
+      : businesses.filter(b => b.id === fleetScope);
 
-        let message = `Hello ${firstName}! It's ${bizName}. We noticed it's been about 3 weeks since your last visit. We'd love to see you this weekend! Reply here to save your preferred slot and claim a complimentary VIP perk!`;
-        if (aiTone === 'executive') {
-          message = `Good day ${firstName}. From the desk of ${bizName}: your reserved priority booking window is now open for this weekend. Reply to confirm your executive appointment.`;
-        } else if (aiTone === 'trendy') {
-          message = `Hey ${firstName}! ${bizName} here. Your style is due for a fresh touch-up! We're saving a spot for you this week with VIP priority. Reply to lock it in!`;
+    const items: Array<{
+      bizId: string;
+      bizName: string;
+      bizType: string;
+      customer: Customer;
+      reason: string;
+      scheduledFor: string;
+      message: string;
+      waUrl: string;
+      potentialValue: number;
+    }> = [];
+
+    for (const b of targetBusinesses) {
+      const bCusts = getCustomers(b.id);
+      const cadence = BIZ_CADENCE[b.business_type] || 21;
+
+      const lapsed = bCusts.filter(c => {
+        if (!c.last_visit_date || c.consent_status !== 'consented') return false;
+        const diff = Math.floor((now.getTime() - new Date(c.last_visit_date).getTime()) / 86400000);
+        return diff >= cadence;
+      });
+
+      for (const c of lapsed) {
+        const firstName = c.full_name?.split(' ')[0] || 'Customer';
+        const diff = Math.floor((now.getTime() - new Date(c.last_visit_date!).getTime()) / 86400000);
+        let message = '';
+        let reason = '';
+
+        if (b.business_type === 'pharmacy') {
+          reason = `Refill due (${diff}d since last)`;
+          message = aiTone === 'executive'
+            ? `Good day ${firstName}. From ${b.name}: your ${cadence}-day prescription refill review is ready. Reply to confirm pickup or request doorstep delivery.`
+            : `Hello ${firstName}! 💊 This is ${b.name}. Your monthly medication refill window is now open. Reply here and we will prepare it for quick pickup or delivery!`;
+        } else if (b.business_type === 'salon') {
+          reason = `Styling due (${diff}d since visit)`;
+          message = aiTone === 'trendy'
+            ? `Hey ${firstName}! ${b.name} here ✨ Time to refresh your look! We're saving a priority VIP styling slot for you this week. Reply to book!`
+            : `Hello ${firstName}! We miss you at ${b.name}. Your styling touch-up is due this week. Reply to reserve your preferred chair with our senior stylist!`;
+        } else if (b.business_type === 'laundry') {
+          reason = `Laundry cycle (${diff}d since drop-off)`;
+          message = `Hello ${firstName}! It's ${b.name}. We're running our weekly neighborhood pickup route. Reply to book your laundry drop-off or pickup!`;
+        } else {
+          reason = `Lapsed ${diff}d (cadence: ${cadence}d)`;
+          message = aiTone === 'executive'
+            ? `Good day ${firstName}. From the desk of ${b.name}: your priority booking window is open. Reply to confirm your executive appointment.`
+            : `Hello ${firstName}! It's ${b.name}. We noticed it's been about ${diff} days since your last visit. We'd love to see you back this week — reply to claim your VIP priority slot!`;
         }
 
-        return {
+        const avgVal = b.business_type === 'pharmacy' ? 12000 : b.business_type === 'barber' ? 6000 : 8000;
+
+        items.push({
+          bizId: b.id,
+          bizName: b.name,
+          bizType: b.business_type,
           customer: c,
-          reason: 'Lapsed 25+ days without visit',
-          scheduledFor: 'Thursday 10:00 AM (Pre-Weekend)',
+          reason,
+          scheduledFor: 'Auto-Queued (Priority Window)',
           message,
           waUrl: getWhatsAppUrl(c.phone, message),
-          potentialValue: c.total_spent_ngn || 6000,
-        };
-      });
-  }, [customers, activeBusiness, aiTone]);
+          potentialValue: c.total_spent_ngn || avgVal,
+        });
+      }
+    }
+
+    return items;
+  }, [fleetScope, businesses, aiTone]);
 
   // Total potential revenue currently queued by AI
   const aiTotalQueuedValue = useMemo(() => {
@@ -302,6 +381,84 @@ function CampaignContent() {
             </div>
           </div>
 
+          {/* Fleet Scope Selector & Batch Dispatch Bar */}
+          <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-md space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-emerald-400" />
+                  <h3 className="font-black text-sm text-white">Autonomous Multi-Client Fleet Engine</h3>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold px-2 py-0.5 rounded-full uppercase">
+                    Continuous Autopilot
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Your AI engine manages customer retention for all client businesses simultaneously without needing manual switching.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setBatchDispatched(true);
+                  setTimeout(() => setBatchDispatched(false), 5000);
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                <span>Dispatch Entire Fleet ({aiLapsedQueue.length})</span>
+              </button>
+            </div>
+
+            {/* Scope Tabs */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setFleetScope('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                  fleetScope === 'all'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                <Zap className="w-3 h-3" />
+                <span>All Businesses (Fleet)</span>
+                <span className="text-[10px] bg-slate-950/40 px-1.5 py-0.2 rounded-full font-black">
+                  {businesses.length}
+                </span>
+              </button>
+
+              {businesses.map((b) => {
+                const icon = BIZ_ICONS[b.business_type] || '🏪';
+                const isSelected = fleetScope === b.id;
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setFleetScope(b.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    <span>{icon}</span>
+                    <span>{b.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {batchDispatched && (
+              <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-xs font-bold text-emerald-300 flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>
+                  ✓ Autonomous Fleet Dispatch Initiated: {aiLapsedQueue.length} retention actions dispatched across your managed accounts. Zero staff manual work!
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* AI Persona & Tone Settings Bar */}
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-0.5">
@@ -476,6 +633,10 @@ function CampaignContent() {
                   >
                     <div className="space-y-1.5 flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] px-2 py-0.5 bg-slate-900 text-slate-100 rounded-lg font-bold flex items-center gap-1">
+                          <span>{BIZ_ICONS[item.bizType] || '🏪'}</span>
+                          <span className="truncate max-w-[130px]">{item.bizName}</span>
+                        </span>
                         <span className="font-bold text-sm text-slate-900">{item.customer.full_name}</span>
                         <span className="text-[11px] text-slate-500 font-mono">{item.customer.phone}</span>
                         <span className="text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full">

@@ -25,6 +25,7 @@ import {
   Sparkles,
   ShieldCheck,
   RefreshCw,
+  Store,
 } from 'lucide-react';
 
 const BIZ_ICONS: Record<string, string> = {
@@ -410,14 +411,24 @@ export default function AgencyHQPage() {
                         : 'bg-slate-900 text-white hover:bg-slate-800'
                     }`}
                   >
-                    {isActive ? '✓ Managing' : 'Manage Client'}
+                    {isActive ? '✓ Active Client' : 'Manage'}
                   </button>
                   <Link
-                    href="/campaigns"
-                    className="flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition"
-                    onClick={() => { if (!isActive) { setActiveBusiness(biz.id); refreshData(); } }}
+                    href={`/portal/${biz.opt_in_slug}`}
+                    target="_blank"
+                    className="flex items-center justify-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition"
+                    title="Open Store Owner Portal"
                   >
-                    <Bot className="w-3.5 h-3.5" />
+                    <Store className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Portal</span>
+                  </Link>
+                  <Link
+                    href="/campaigns"
+                    className="flex items-center justify-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition"
+                    onClick={() => { if (!isActive) { setActiveBusiness(biz.id); refreshData(); } }}
+                    title="Open AI Autopilot"
+                  >
+                    <Bot className="w-3.5 h-3.5 text-emerald-600" />
                     <span className="hidden sm:inline">AI</span>
                   </Link>
                 </div>
