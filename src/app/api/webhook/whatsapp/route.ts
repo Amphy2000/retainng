@@ -22,11 +22,34 @@ export async function POST(req: NextRequest) {
       messageBody = (formData.get('Body') as string) || '';
     } else {
       const json = await req.json();
-      fromNumber = json?.From || json?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from || '';
-      messageBody = json?.Body || json?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || '';
+      
+      // Support Twilio JSON, Meta Cloud API, Green-API, Whapi.cloud, and UltraMsg payloads
+      fromNumber =
+        json?.From ||
+        json?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from || // Meta Cloud API
+        json?.senderData?.chatId || // Green-API
+        json?.senderData?.sender || // Green-API
+        json?.messages?.[0]?.from || // Whapi.cloud
+        json?.data?.from || // UltraMsg
+        '';
+
+      messageBody =
+        json?.Body ||
+        json?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body || // Meta Cloud API
+        json?.messageData?.textMessageData?.textMessage || // Green-API
+        json?.messageData?.extendedTextMessageData?.text || // Green-API
+        json?.messages?.[0]?.text?.body || // Whapi.cloud
+        json?.data?.body || // UltraMsg
+        '';
     }
 
-    const cleanPhone = fromNumber.replace(/^whatsapp:/i, '').trim();
+    // Clean phone number (strip whatsapp:, @c.us, @s.whatsapp.net, +, spaces)
+    const cleanPhone = fromNumber
+      .replace(/^whatsapp:/i, '')
+      .replace(/@c\.us$/i, '')
+      .replace(/@s\.whatsapp\.net$/i, '')
+      .replace(/[^0-9]/g, '')
+      .trim();
 
     // Default response message
     const replyText =
