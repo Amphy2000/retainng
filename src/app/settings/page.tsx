@@ -82,6 +82,19 @@ export default function SettingsPage() {
       concierge_phone: conciergePhone.trim() || undefined,
     });
 
+    // Sync manager phone to the server-side pharmacy config (used by WhatsApp webhook)
+    // This means zero manual env vars per pharmacy — ever.
+    fetch('/api/pharmacy-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slug: activeBusiness.opt_in_slug,
+        pharmacyName: name.trim(),
+        managerPhone: managerAlertPhone.trim(),
+        conciergePhone: conciergePhone.trim(),
+      }),
+    }).catch(() => {/* non-critical — config still works from memory */});
+
     setIsSaved(true);
     refreshData();
     setTimeout(() => setIsSaved(false), 3000);

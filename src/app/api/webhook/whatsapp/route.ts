@@ -30,10 +30,18 @@ const GREEN_API_TOKEN =
   process.env.GREEN_API_TOKEN || '98d11063fda64174ae6c50d0401bb2f0569f7f45a0ad49e3ac';
 const GREEN_API_URL = process.env.GREEN_API_URL || 'https://7107.api.greenapi.com';
 
-// --- Manager alert phone per slug (from env or default) ---
-const MANAGER_ALERTS: Record<string, string> = {
-  'apex-pharmacy': process.env.APEX_MANAGER_PHONE || '',
-};
+/** Look up manager phone for any slug — reads from /api/pharmacy-config (no env vars needed) */
+async function getManagerPhone(slug: string, host: string): Promise<string> {
+  try {
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const res = await fetch(`${protocol}://${host}/api/pharmacy-config?slug=${encodeURIComponent(slug)}`);
+    if (!res.ok) return '';
+    const data = await res.json();
+    return data?.managerPhone || '';
+  } catch {
+    return '';
+  }
+}
 
 async function sendWhatsApp(toPhone: string, message: string): Promise<void> {
   const chatId = `${toPhone}@c.us`;
@@ -147,6 +155,7 @@ function detectIntentKeywords(msg: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  const host = req.headers.get('host') || 'retainng.vercel.app';
   try {
     const contentType = req.headers.get('content-type') || '';
     let fromNumber = '';
@@ -364,7 +373,7 @@ ORDER_DETECTED: [medication name] | [delivery preference]`;
 
     // Send manager dispatch alert for refill orders
     if (isOrder) {
-      const managerPhone = MANAGER_ALERTS[state.slug] || '';
+      const managerPhone = await getManagerPhone(state.slug, host);
       if (managerPhone) {
         const managerAlert =
           `🚨 *NEW REFILL ORDER — Apex Health & Community Pharmacy*\n\n` +
