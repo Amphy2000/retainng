@@ -214,8 +214,9 @@ export async function POST(req: NextRequest) {
       cleanPhone = '234' + cleanPhone.slice(1);
     }
 
-    // Block self-messages (bot's own outbound triggers)
-    if (cleanPhone === '2347032673310' || cleanPhone === '2349169153129') {
+    // Only ignore if the message was sent by the active bot number itself to prevent loops
+    const activeBotNumber = '2347032673310';
+    if (cleanPhone === activeBotNumber) {
       return NextResponse.json({ ignored: 'self-message' });
     }
 
