@@ -161,8 +161,8 @@ export function Navbar({ onOpenRecordModal, onOpenQrModal, onBusinessChanged }: 
                 className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition text-xs cursor-pointer"
               >
                 <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                <span className="text-slate-200 font-semibold max-w-[120px] truncate hidden sm:block">
-                  {activeBiz?.name ?? 'Select Client'}
+                <span className="text-slate-200 font-semibold max-w-[140px] truncate hidden sm:block">
+                  {activeBiz?.name ?? 'All Stores (Fleet)'}
                 </span>
                 <ChevronDown className="w-3 h-3 text-slate-500 shrink-0" />
               </button>
@@ -179,6 +179,29 @@ export function Navbar({ onOpenRecordModal, onOpenQrModal, onBusinessChanged }: 
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                     </div>
                     <div className="p-1.5 space-y-0.5 max-h-64 overflow-y-auto">
+                      <button
+                        onClick={() => {
+                          localStorage.removeItem('kudi_retention_active_biz_id');
+                          refreshBiz();
+                          setClientMenuOpen(false);
+                          onBusinessChanged?.();
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition cursor-pointer ${
+                          !activeBiz
+                            ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
+                            : 'text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-base">🌍</span>
+                          <div>
+                            <div className="font-semibold text-xs">All Stores (Fleet Overview)</div>
+                            <div className="text-[10px] text-slate-500">Agency Fleet Portfolio</div>
+                          </div>
+                        </div>
+                        {!activeBiz && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+                      </button>
+
                       {businesses.map((biz) => {
                         const isSelected = biz.id === activeBiz?.id;
                         const icon = BIZ_ICONS[biz.business_type] || '🏪';
@@ -204,19 +227,14 @@ export function Navbar({ onOpenRecordModal, onOpenQrModal, onBusinessChanged }: 
                         );
                       })}
                     </div>
-                    <div className="border-t border-slate-800 p-2 flex gap-2">
-                      <button
-                        onClick={() => { onOpenQrModal(); setClientMenuOpen(false); }}
-                        className="flex-1 py-1.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    <div className="border-t border-slate-800 p-2">
+                      <Link
+                        href="/settings"
+                        onClick={() => setClientMenuOpen(false)}
+                        className="w-full py-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 hover:bg-slate-800/80 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <QrCode className="w-3.5 h-3.5" /> Counter QR
-                      </button>
-                      <button
-                        onClick={() => { onOpenRecordModal(); setClientMenuOpen(false); }}
-                        className="flex-1 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5" /> Log Visit
-                      </button>
+                        <PlusCircle className="w-3.5 h-3.5" /> + Onboard New Partner
+                      </Link>
                     </div>
                   </div>
                 </>
@@ -255,19 +273,14 @@ export function Navbar({ onOpenRecordModal, onOpenQrModal, onBusinessChanged }: 
                 </Link>
               );
             })}
-            <div className="flex gap-2 pt-2 border-t border-slate-800 mt-2">
-              <button
-                onClick={() => { onOpenQrModal(); setMobileMenuOpen(false); }}
-                className="flex-1 py-2 text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+            <div className="pt-2 border-t border-slate-800 mt-2">
+              <Link
+                href="/settings"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full py-2 text-xs font-bold text-emerald-400 bg-slate-900 border border-slate-700 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
               >
-                <QrCode className="w-4 h-4" /> Counter QR
-              </button>
-              <button
-                onClick={() => { onOpenRecordModal(); setMobileMenuOpen(false); }}
-                className="flex-1 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
-              >
-                <PlusCircle className="w-4 h-4" /> Log Visit
-              </button>
+                <PlusCircle className="w-4 h-4" /> + Onboard New Partner
+              </Link>
             </div>
           </div>
         )}
