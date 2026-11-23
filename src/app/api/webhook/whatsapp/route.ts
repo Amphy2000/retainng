@@ -110,6 +110,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // If this webhook came from Green-API (has senderData), send outbound WhatsApp message via Green-API REST API
+    const greenApiId = process.env.GREEN_API_ID_INSTANCE || '710722811499';
+    const greenApiToken = process.env.GREEN_API_TOKEN || '';
+    const greenApiUrl = process.env.GREEN_API_URL || 'https://7107.api.greenapi.com';
+
+    if (greenApiToken && cleanPhone) {
+      try {
+        const chatId = `${cleanPhone}@c.us`;
+        await fetch(`${greenApiUrl}/waInstance${greenApiId}/sendMessage/${greenApiToken}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId,
+            message: replyText,
+          }),
+        });
+      } catch (sendErr) {
+        console.error('Error sending Green-API reply:', sendErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       phone: cleanPhone,
