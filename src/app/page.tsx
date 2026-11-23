@@ -180,59 +180,43 @@ export default function AgencyHQPage() {
         </div>
       </div>
 
-      {/* ━━ 2. THE ATTENTION RADAR ("DOES ANYTHING NEED ME TODAY?") ━━ */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-2">
+      {/* ━━ 2. 100% AUTOPILOT WATCHDOG STATUS ━━ */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-emerald-600" />
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-wide">
-              Today&apos;s Solopreneur Action Items
+              AI Retention Autopilot
             </h2>
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Automated Watchdog
+          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+            Autonomous • 0 Staff Input
           </span>
         </div>
 
-        {totals.attentionStores.length === 0 ? (
-          <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black shrink-0">
-              ✓
+        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black shrink-0 shadow-sm">
+              <Bot className="w-5 h-5" />
             </div>
             <div>
               <div className="text-xs font-black text-emerald-950">
-                All Systems Green — Zero Manual Work Needed Today!
+                All 5 Partner Stores Running Hands-Free
               </div>
               <div className="text-[11px] text-emerald-800/80 mt-0.5">
-                All client stores are actively logging customer visits, and the AI is autonomously queueing re-invites.
+                Patients scan 4-in-1 bag slips ➔ WhatsApp AI binds them ➔ 28-day refill reminders &amp; dispensary orders trigger automatically.
               </div>
             </div>
           </div>
-        ) : (
-          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
-            <div className="flex items-center gap-2 text-xs font-black text-amber-950">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>{totals.attentionStores.length} store has had a quiet counter recently:</span>
-            </div>
-            <div className="space-y-1.5 pl-6">
-              {totals.attentionStores.map((item) => (
-                <div key={item.biz.id} className="text-xs text-amber-900 flex items-center justify-between">
-                  <span>
-                    <strong>{item.biz.name}</strong> hasn&apos;t logged a check-in in {item.daysSinceLastSale} days.
-                  </span>
-                  <a
-                    href={`https://wa.me/?text=Hello!%20Checking%20in%20from%20RetainNG.%20Is%20your%20counter%20QR%20stand%20clearly%20placed%20for%20customers%20today?`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] font-bold text-amber-900 underline hover:text-amber-950"
-                  >
-                    Quick Check-in Nudge →
-                  </a>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+
+          <Link
+            href="/campaigns"
+            className="shrink-0 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 rounded-xl transition shadow-sm flex items-center gap-1.5"
+          >
+            <span>View Queued Refills</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
       </div>
 
       {/* ━━ 3. THE 3 SIMPLE NUMBERS THAT PROVE YOUR AGENCY'S VALUE ━━ */}
@@ -342,10 +326,10 @@ export default function AgencyHQPage() {
                       setActiveBusiness(biz.id);
                       openQrModal(true);
                     }}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer border border-slate-200"
+                    className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer border border-emerald-200"
                   >
-                    <QrCode className="w-3.5 h-3.5" />
-                    <span>Stand Card</span>
+                    <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Print Bag Slips</span>
                   </button>
                 </div>
               </div>
