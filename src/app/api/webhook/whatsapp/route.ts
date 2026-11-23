@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabaseClient';
 
 /**
  * RetainNG WhatsApp AI Concierge Bot
@@ -32,6 +33,75 @@ const KNOWN_BUSINESSES: Record<string, { name: string; type: string; location: s
   'yaba-glow': { name: 'Yaba Glow Hair Studio & Spa', type: 'salon', location: 'Yaba, Lagos' },
   'sparklewash-ikeja': { name: 'SparkleWash Express Laundry', type: 'laundry', location: 'Ikeja, Lagos' },
 };
+
+// --- Supabase Persistence Helpers ---
+async function syncPatientToSupabase(params: {
+  phone: string;
+  fullName: string;
+  slug: string;
+  tag?: string;
+  notes?: string;
+}) {
+  if (!supabaseAdmin) return;
+  try {
+    const { data: biz } = await supabaseAdmin
+      .from('businesses')
+      .select('id, name')
+      .eq('opt_in_slug', params.slug)
+      .maybeSingle();
+
+    if (!biz) return;
+
+    await supabaseAdmin.from('customers').upsert(
+      {
+        business_id: biz.id,
+        phone: `+${params.phone}`,
+        full_name: params.fullName || `Customer ...${params.phone.slice(-4)}`,
+        tags: params.tag ? [params.tag] : ['Bag Slip Scan'],
+        notes: params.notes,
+        consent_status: 'consented',
+        consent_source: 'qr_optin',
+        last_visit_date: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'business_id,phone' }
+    );
+  } catch (err) {
+    console.warn('Supabase sync warning:', err);
+  }
+}
+
+async function recordOrderToSupabase(params: {
+  phone: string;
+  fullName: string;
+  slug: string;
+  orderItem: string;
+  amountNgn?: number;
+}) {
+  if (!supabaseAdmin) return;
+  try {
+    const { data: biz } = await supabaseAdmin
+      .from('businesses')
+      .select('id, business_type')
+      .eq('opt_in_slug', params.slug)
+      .maybeSingle();
+
+    if (!biz) return;
+
+    const amount = params.amountNgn || (biz.business_type === 'pharmacy' ? 12000 : 8000);
+
+    await supabaseAdmin.from('sales_or_visits').insert({
+      business_id: biz.id,
+      customer_name: params.fullName || 'Customer',
+      customer_phone: `+${params.phone}`,
+      service_or_product: params.orderItem || 'Prescription Refill',
+      amount_ngn: amount,
+      is_manual_entry: false,
+    });
+  } catch (err) {
+    console.warn('Supabase order sync warning:', err);
+  }
+}
 
 function resolveBusiness(slugOrText: string): { slug: string; name: string; type: string; location: string } | null {
   const lower = slugOrText.toLowerCase();
@@ -279,6 +349,14 @@ export async function POST(req: NextRequest) {
 
     // If first-time scan with [ref:...]
     if (refMatch) {
+      // Sync patient to Supabase
+      syncPatientToSupabase({
+        phone: cleanPhone,
+        fullName: profileName || '',
+        slug: activeSlug,
+        tag: 'Bag Slip Scan',
+      }).catch(() => {});
+
       const greeting = profileName ? ` ${profileName}` : '';
       const bizDisplay = activeBizName || 'your pharmacy';
       const reply =
@@ -395,6 +473,14 @@ ORDER_DETECTED: [item name]`;
 
     // Send manager dispatch alert for refill orders
     if (isOrder) {
+      // Record refill order to Supabase
+      recordOrderToSupabase({
+        phone: cleanPhone,
+        fullName: displayName,
+        slug: activeSlug,
+        orderItem: detectedMed || messageBody,
+      }).catch(() => {});
+
       const managerPhone = await getManagerPhone(activeSlug, host);
       if (managerPhone && managerPhone !== cleanPhone) {
         const targetStore = activeBizName || 'RetainNG Partner Store';
