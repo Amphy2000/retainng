@@ -19,8 +19,8 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
   const [copied, setCopied] = useState(false);
   const [optInUrl, setOptInUrl] = useState<string>('');
   const [showPrintCard, setShowPrintCard] = useState(initialShowPrintCard);
-  const [qrMode, setQrMode] = useState<'web' | 'whatsapp'>('web');
-  const [printLayout, setPrintLayout] = useState<'stand' | 'bag_slips'>('stand');
+  const [qrMode, setQrMode] = useState<'web' | 'whatsapp'>('whatsapp');
+  const [printLayout, setPrintLayout] = useState<'stand' | 'bag_slips'>('bag_slips');
 
   // Customizable Stand Card Incentive Hooks (Solves "What if business doesn't want to offer discounts")
   const [incentiveType, setIncentiveType] = useState<
@@ -354,18 +354,18 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                       </div>
 
                       {business.business_type === 'pharmacy' || business.name.toLowerCase().includes('pharm') ? (
-                        <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2 text-left space-y-1 text-[9px] text-slate-700">
-                          <div className="flex items-center gap-1.5 font-bold text-emerald-800">
-                            <span className="text-emerald-600 shrink-0">✓</span>
-                            <span>Free Health Check (BP, Sugar, or Weight)</span>
+                        <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-2.5 text-left space-y-1.5 text-[9.5px] text-slate-800">
+                          <div className="flex items-start gap-1.5 font-bold text-emerald-900">
+                            <span className="text-emerald-600 font-black">✓</span>
+                            <span>Automatic Refill Alerts (Never run out of meds)</span>
                           </div>
-                          <div className="flex items-center gap-1.5 font-bold text-emerald-800">
-                            <span className="text-emerald-600 shrink-0">✓</span>
-                            <span>Direct Pharmacist WhatsApp Consultation</span>
+                          <div className="flex items-start gap-1.5 font-bold text-emerald-900">
+                            <span className="text-emerald-600 font-black">✓</span>
+                            <span>Free In-Store BP &amp; Blood Sugar Checks</span>
                           </div>
-                          <div className="flex items-center gap-1.5 font-bold text-emerald-800">
-                            <span className="text-emerald-600 shrink-0">✓</span>
-                            <span>Automatic Refill & Baby Supply Reminders</span>
+                          <div className="flex items-start gap-1.5 font-bold text-emerald-900">
+                            <span className="text-emerald-600 font-black">✓</span>
+                            <span>24/7 Doorstep Delivery &amp; Pharmacist Chat</span>
                           </div>
                         </div>
                       ) : (
@@ -380,16 +380,17 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                           <img
                             src={qrDataUrl}
                             alt="Bag QR"
-                            className="w-24 h-24 mx-auto border border-slate-200 rounded-xl p-1 bg-white shadow-xs"
+                            className="w-24 h-24 mx-auto border border-slate-300 rounded-xl p-1 bg-white shadow-xs"
                           />
                         )}
-                        <div className="text-[9px] font-semibold text-slate-500 mt-1">
-                          Scan with Camera or WhatsApp
+                        <div className="text-[9.5px] font-extrabold text-emerald-800 mt-1">
+                          📲 Scan with WhatsApp Camera (1 Tap &bull; Zero Typing)
                         </div>
                       </div>
 
-                      <div className="text-[8px] text-slate-400 border-t border-slate-100 pt-1 font-medium">
-                        ✓ Free Patient Service • Keep with your meds
+                      <div className="text-[8px] text-slate-500 border-t border-slate-200 pt-1 font-semibold flex items-center justify-between">
+                        <span>✓ Free Patient Care Service</span>
+                        <span>Keep with your medications</span>
                       </div>
                     </div>
                   ))}
