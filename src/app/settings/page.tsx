@@ -189,6 +189,8 @@ export default function SettingsPage() {
                   onChange={(e) => setNewBizType(e.target.value as BusinessType)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
                 >
+                  <option value="pharmacy">💊 Community Pharmacy & Health</option>
+                  <option value="clinic">🩺 Medical Clinic & Diagnostics</option>
                   <option value="barber">Barbershop</option>
                   <option value="salon">Hair Salon & Nails</option>
                   <option value="laundry">Laundry & Dry Cleaning</option>
@@ -241,6 +243,8 @@ export default function SettingsPage() {
                 onChange={(e) => setBusinessType(e.target.value as BusinessType)}
                 className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               >
+                <option value="pharmacy">💊 Community Pharmacy & Health</option>
+                <option value="clinic">🩺 Medical Clinic & Diagnostics</option>
                 <option value="barber">Barbershop & Grooming</option>
                 <option value="salon">Hair Salon & Nails</option>
                 <option value="laundry">Laundry & Dry Cleaning</option>
