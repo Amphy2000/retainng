@@ -24,15 +24,39 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
 
   // Customizable Stand Card Incentive Hooks (Solves "What if business doesn't want to offer discounts")
   const [incentiveType, setIncentiveType] = useState<
-    'free_perk' | 'wifi' | 'vip' | 'discount' | 'receipt' | 'pharm_refill' | 'pharm_delivery' | 'pharm_care' | 'custom'
+    | 'free_perk'
+    | 'wifi'
+    | 'vip'
+    | 'discount'
+    | 'receipt'
+    | 'pharm_bp_voucher'
+    | 'pharm_refill'
+    | 'pharm_delivery'
+    | 'pharm_care'
+    | 'custom'
   >('free_perk');
   const [customBadge, setCustomBadge] = useState('🎁 EXCLUSIVE CUSTOMER PERK');
   const [customOfferText, setCustomOfferText] = useState('Scan with your phone camera to claim your Free Treatment Perk & priority booking!');
 
   // Presets
-  function applyIncentivePreset(type: 'free_perk' | 'wifi' | 'vip' | 'discount' | 'receipt' | 'pharm_refill' | 'pharm_delivery' | 'pharm_care' | 'custom') {
+  function applyIncentivePreset(
+    type:
+      | 'free_perk'
+      | 'wifi'
+      | 'vip'
+      | 'discount'
+      | 'receipt'
+      | 'pharm_bp_voucher'
+      | 'pharm_refill'
+      | 'pharm_delivery'
+      | 'pharm_care'
+      | 'custom'
+  ) {
     setIncentiveType(type);
-    if (type === 'pharm_refill') {
+    if (type === 'pharm_bp_voucher') {
+      setCustomBadge('🩺 FREE BP & SUGAR CHECK VOUCHER');
+      setCustomOfferText('Scan with phone to claim a Free Blood Pressure & Sugar Check on your next visit + VIP refill alerts!');
+    } else if (type === 'pharm_refill') {
       setCustomBadge('💊 VIP REFILL & ADHERENCE');
       setCustomOfferText('Scan to get automated 28-day WhatsApp refill reminders before your routine medications finish!');
     } else if (type === 'pharm_delivery') {
@@ -72,8 +96,8 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
       if (!biz) return; // Guard: no active business yet
 
       const isPharmacy = biz.business_type === 'pharmacy' || biz.name.toLowerCase().includes('pharm');
-      if (isPharmacy && incentiveType === 'free_perk') {
-        applyIncentivePreset('pharm_refill');
+      if (isPharmacy && (incentiveType === 'free_perk' || incentiveType === 'pharm_refill')) {
+        applyIncentivePreset('pharm_bp_voucher');
       }
 
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
@@ -209,6 +233,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                 {[
                   ...(business.business_type === 'pharmacy' || business.name.toLowerCase().includes('pharm')
                     ? [
+                        { id: 'pharm_bp_voucher', label: '🩺 Free BP/Sugar Check' },
                         { id: 'pharm_refill', label: '💊 Refill Reminders' },
                         { id: 'pharm_delivery', label: '🛵 Home Delivery' },
                         { id: 'pharm_care', label: '🩺 Clinical Care' },

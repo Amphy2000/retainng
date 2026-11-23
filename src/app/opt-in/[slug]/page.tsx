@@ -26,8 +26,14 @@ function OptInFormContent() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [agreed, setAgreed] = useState(true); // checked by default on self-registration form, but with explicit disclosure
+
+  function toggleCategory(id: string) {
+    setSelectedCategories((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+    );
+  }
 
   const [submitted, setSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -96,7 +102,7 @@ function OptInFormContent() {
         phone: phone.trim(),
         email: email.trim() || undefined,
         agreed_to_marketing: agreed,
-        visit_category: selectedCategory || undefined,
+        visit_category: selectedCategories.length > 0 ? selectedCategories : undefined,
       });
 
       if (res.success) {
@@ -125,10 +131,11 @@ function OptInFormContent() {
 
   const categoryOptions = isPharmacy
     ? [
-        { id: 'Refill (Chronic/Routine)', label: '💊 Monthly Refill', desc: 'BP, Diabetes, Routine Rx' },
-        { id: 'Acute Care (Prescription)', label: '🌡️ Acute Care', desc: 'Malaria, Antibiotics, Pain' },
-        { id: 'Family & OTC', label: '👶 Family & OTC', desc: 'Vitamins, Baby, Daily Health' },
-        { id: 'Home Delivery / Pick-up', label: '🛵 Home Delivery', desc: 'Discreet door delivery' },
+        { id: 'Refill (BP/Hypertension)', label: '💊 BP / Hypertension', desc: '28-Day Refill Alert' },
+        { id: 'Refill (Diabetes/Sugar)', label: '🩸 Diabetes & Sugar', desc: '28-Day Refill Alert' },
+        { id: 'Acute Care (Malaria/Infection)', label: '🌡️ Acute Care / Malaria', desc: 'Recovery Follow-up' },
+        { id: 'Family & OTC', label: '👶 Family & Vitamins', desc: 'Monthly Essentials' },
+        { id: 'Home Delivery', label: '🛵 Home Delivery', desc: 'Discreet Dispatch' },
       ]
     : isGrooming
     ? [
@@ -182,10 +189,13 @@ function OptInFormContent() {
                 <p className="text-xs text-slate-500 mt-1.5 leading-relaxed max-w-xs mx-auto">
                   Thank you, <strong className="text-slate-800">{fullName}</strong>. Your details and visit preferences have been saved with <strong className="text-slate-800">{business.name}</strong>.
                 </p>
-                {selectedCategory && (
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold mt-2">
-                    <span>Priority:</span>
-                    <span className="font-bold">{selectedCategory}</span>
+                {selectedCategories.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
+                    {selectedCategories.map((c) => (
+                      <span key={c} className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
+                        ✓ {c}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
@@ -206,7 +216,7 @@ function OptInFormContent() {
                   setFullName('');
                   setPhone('');
                   setEmail('');
-                  setSelectedCategory('');
+                  setSelectedCategories([]);
                 }}
                 className="w-full py-3 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
               >
@@ -281,29 +291,32 @@ function OptInFormContent() {
                 </div>
               </div>
 
-              {/* 1-Tap Visit Category Selector */}
+              {/* Multi-Select Care & Visit Categories */}
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1.5 flex items-center justify-between">
-                  <span>{isPharmacy ? 'Primary Care / Visit Category' : 'Service Type (Optional)'}</span>
-                  <span className="text-[10px] text-slate-400 font-normal">1-tap selection</span>
+                  <span>{isPharmacy ? 'Your Care Needs (Select all that apply)' : 'Service Type (Select all that apply)'}</span>
+                  <span className="text-[10px] text-emerald-600 font-bold">Tap to select</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {categoryOptions.map((opt) => {
-                    const active = selectedCategory === opt.id;
+                    const active = selectedCategories.includes(opt.id);
                     return (
                       <button
                         type="button"
                         key={opt.id}
-                        onClick={() => setSelectedCategory(active ? '' : opt.id)}
+                        onClick={() => toggleCategory(opt.id)}
                         className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                           active
                             ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20'
                             : 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
                         }`}
                       >
-                        <p className={`text-xs font-bold leading-tight ${active ? 'text-emerald-800' : 'text-slate-800'}`}>
-                          {opt.label}
-                        </p>
+                        <div className="flex items-center justify-between">
+                          <p className={`text-xs font-bold leading-tight ${active ? 'text-emerald-800' : 'text-slate-800'}`}>
+                            {opt.label}
+                          </p>
+                          {active && <span className="text-emerald-600 font-bold text-xs">✓</span>}
+                        </div>
                         <p className={`text-[10px] mt-0.5 line-clamp-1 ${active ? 'text-emerald-600' : 'text-slate-400'}`}>
                           {opt.desc}
                         </p>

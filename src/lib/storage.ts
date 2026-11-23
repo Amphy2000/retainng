@@ -792,7 +792,7 @@ export function registerCustomerOptIn(
     phone: string;
     email?: string;
     agreed_to_marketing: boolean;
-    visit_category?: string;
+    visit_category?: string | string[];
   }
 ): { success: boolean; message: string; customerId?: string } {
   const business = getBusinessBySlug(slug);
@@ -814,7 +814,18 @@ export function registerCustomerOptIn(
 
   const cleanPhone = data.phone.trim();
   const cleanName = data.full_name.trim();
-  const categoryTag = data.visit_category?.trim();
+
+  // Normalize categories into string array
+  const incomingCategories: string[] = Array.isArray(data.visit_category)
+    ? data.visit_category.map((s) => s.trim()).filter(Boolean)
+    : data.visit_category
+    ? data.visit_category
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+
+  const categorySummary = incomingCategories.join(', ');
 
   // Find if already exists
   const existingIdx = allCustomers.findIndex(
@@ -826,15 +837,18 @@ export function registerCustomerOptIn(
   if (existingIdx !== -1) {
     custId = allCustomers[existingIdx].id;
     const currentTags = allCustomers[existingIdx].tags || [];
-    const updatedTags = categoryTag && !currentTags.includes(categoryTag)
-      ? [categoryTag, ...currentTags]
-      : currentTags;
+    const mergedTags = [...currentTags];
+    for (const cat of incomingCategories) {
+      if (!mergedTags.includes(cat)) {
+        mergedTags.unshift(cat);
+      }
+    }
 
     allCustomers[existingIdx] = {
       ...allCustomers[existingIdx],
       full_name: cleanName,
       email: data.email?.trim() || allCustomers[existingIdx].email,
-      tags: updatedTags,
+      tags: mergedTags,
       consent_status: 'consented',
       consent_source: 'qr_optin',
       consent_date: now,
@@ -843,8 +857,8 @@ export function registerCustomerOptIn(
   } else {
     custId = `cust_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const initialTags = ['Self-Registered', 'Opt-In'];
-    if (categoryTag) {
-      initialTags.unshift(categoryTag);
+    for (const cat of incomingCategories.reverse()) {
+      initialTags.unshift(cat);
     }
 
     allCustomers.push({
@@ -854,7 +868,7 @@ export function registerCustomerOptIn(
       phone: cleanPhone,
       email: data.email?.trim() || undefined,
       tags: initialTags,
-      notes: categoryTag ? `Visit Category: ${categoryTag}. Registered via counter QR code.` : 'Customer signed up via QR code or public link.',
+      notes: categorySummary ? `Care Tracks: ${categorySummary}. Registered via counter QR code.` : 'Customer signed up via QR code or public link.',
       consent_status: 'consented',
       consent_source: 'qr_optin',
       consent_date: now,
@@ -872,7 +886,7 @@ export function registerCustomerOptIn(
     customer_phone: cleanPhone,
     amount_ngn: 0,
     visit_date: now.split('T')[0],
-    service_or_product: categoryTag || 'Counter Self Check-in',
+    service_or_product: categorySummary || 'Counter Self Check-in',
     notes: 'Registered and checked in via Counter QR Stand',
     is_manual_entry: false,
     created_at: now,
@@ -885,7 +899,7 @@ export function registerCustomerOptIn(
     customer_id: custId,
     status: 'consented',
     source: 'qr_optin',
-    notes: `Customer signed up directly on web form/QR with explicit checkbox checked. Category: ${categoryTag || 'General'}`,
+    notes: `Customer signed up directly on web form/QR with explicit checkbox checked. Category: ${categorySummary || 'General'}`,
     created_at: now,
   });
 
