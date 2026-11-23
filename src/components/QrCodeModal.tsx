@@ -110,11 +110,13 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
 
       let finalUrl = webUrl;
       if (qrMode === 'whatsapp') {
-        const digits = (biz.phone || '08000000000').replace(/\D/g, '');
+        const useConcierge = biz.whatsapp_routing_mode === 'agency_concierge' && biz.concierge_phone;
+        const targetNumber = useConcierge ? biz.concierge_phone! : (biz.phone || '08000000000');
+        const digits = targetNumber.replace(/\D/g, '');
         const intlPhone = digits.startsWith('0') ? `234${digits.slice(1)}` : digits;
         const msg = isPharmacy
-          ? `Hello ${biz.name}! Please enroll me for VIP Refill Reminders and Pharmacist Care.`
-          : `Hello ${biz.name}! I am at your shop and checking in today!`;
+          ? `Hello! I want to enroll for VIP Refill Reminders and Care with ${biz.name}. [ref:${biz.opt_in_slug}]`
+          : `Hello! I am checking in with ${biz.name} for VIP perks! [ref:${biz.opt_in_slug}]`;
         finalUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
       }
 

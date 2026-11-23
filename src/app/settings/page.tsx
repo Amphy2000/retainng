@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { updateBusiness, createBusiness, resetDemoData, clearBusinessData } from '@/lib/storage';
-import { Business, BusinessType } from '@/types';
+import { Business, BusinessType, WhatsAppRoutingMode } from '@/types';
 import { isSupabaseConfigured } from '@/lib/supabaseClient';
 import {
   ShieldCheck,
@@ -13,6 +13,11 @@ import {
   Check,
   ExternalLink,
   QrCode,
+  MessageCircle,
+  Bot,
+  Smartphone,
+  ArrowRight,
+  Send,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -27,6 +32,11 @@ export default function SettingsPage() {
   const [city, setCity] = useState('Lagos');
   const [stateName, setStateName] = useState('Lagos');
   const [timezone, setTimezone] = useState('Africa/Lagos');
+
+  // WhatsApp Fleet & Routing configuration
+  const [whatsappRoutingMode, setWhatsappRoutingMode] = useState<WhatsAppRoutingMode>('agency_concierge');
+  const [managerAlertPhone, setManagerAlertPhone] = useState('');
+  const [conciergePhone, setConciergePhone] = useState('+234 803 200 2026');
 
   const [isSaved, setIsSaved] = useState(false);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
@@ -44,6 +54,10 @@ export default function SettingsPage() {
       setCity(activeBusiness.city || 'Lagos');
       setStateName(activeBusiness.state || 'Lagos');
       setTimezone(activeBusiness.timezone || 'Africa/Lagos');
+
+      setWhatsappRoutingMode(activeBusiness.whatsapp_routing_mode || 'agency_concierge');
+      setManagerAlertPhone(activeBusiness.manager_alert_phone || activeBusiness.phone || '');
+      setConciergePhone(activeBusiness.concierge_phone || '+234 803 200 2026');
     }, 0);
     return () => clearTimeout(timer);
   }, [activeBusiness]);
@@ -63,6 +77,9 @@ export default function SettingsPage() {
       city: city.trim() || 'Lagos',
       state: stateName.trim() || 'Lagos',
       timezone,
+      whatsapp_routing_mode: whatsappRoutingMode,
+      manager_alert_phone: managerAlertPhone.trim() || undefined,
+      concierge_phone: conciergePhone.trim() || undefined,
     });
 
     setIsSaved(true);
@@ -345,6 +362,212 @@ export default function SettingsPage() {
                 <span>Open Form</span>
               </Link>
             </div>
+          </div>
+
+          {/* WhatsApp Fleet Architecture & Routing Settings */}
+          <div className="p-4 sm:p-5 bg-gradient-to-br from-emerald-50/60 via-slate-50 to-teal-50/40 border border-emerald-200/80 rounded-2xl space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                    <Bot className="w-4 h-4" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900">
+                    WhatsApp Fleet Architecture & Message Routing
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-600 mt-1">
+                  Control whether patient WhatsApp chats are handled by your Agency&apos;s Central AI Bot or routed directly to this store&apos;s counter phone.
+                </p>
+              </div>
+            </div>
+
+            {/* Mode selection radio cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              <label
+                className={`relative flex flex-col p-4 rounded-xl border-2 cursor-pointer transition text-left ${
+                  whatsappRoutingMode === 'agency_concierge'
+                    ? 'border-emerald-600 bg-white shadow-sm ring-2 ring-emerald-500/20'
+                    : 'border-slate-200 bg-white/70 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="routingMode"
+                      value="agency_concierge"
+                      checked={whatsappRoutingMode === 'agency_concierge'}
+                      onChange={() => setWhatsappRoutingMode('agency_concierge')}
+                      className="text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                    />
+                    <span className="font-bold text-xs sm:text-sm text-slate-900">
+                      Agency Central Concierge Bot
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 rounded-full">
+                    Recommended
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  One agency WhatsApp number powers all client pharmacies. AI handles 24/7 refills, attribution tag <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-emerald-700 text-[11px]">[ref:{activeBusiness.opt_in_slug}]</code> identifies the store, and dispatches instant order alerts to the manager.
+                </p>
+                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700">
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Zero counter staff burden &bull; Never drops messages</span>
+                </div>
+              </label>
+
+              <label
+                className={`relative flex flex-col p-4 rounded-xl border-2 cursor-pointer transition text-left ${
+                  whatsappRoutingMode === 'store_direct'
+                    ? 'border-emerald-600 bg-white shadow-sm ring-2 ring-emerald-500/20'
+                    : 'border-slate-200 bg-white/70 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="routingMode"
+                      value="store_direct"
+                      checked={whatsappRoutingMode === 'store_direct'}
+                      onChange={() => setWhatsappRoutingMode('store_direct')}
+                      className="text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                    />
+                    <span className="font-bold text-xs sm:text-sm text-slate-900">
+                      Store Direct WhatsApp (wa.me)
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 text-[10px] font-bold uppercase bg-slate-100 text-slate-600 rounded-full">
+                    Manual
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Patient links and bag slips open direct chats to this pharmacy&apos;s physical counter smartphone. Counter attendants must manually reply, track refills, and log customer visits.
+                </p>
+                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[11px] font-semibold text-amber-700">
+                  <span>⚠️ High risk of missed refills during busy hours</span>
+                </div>
+              </label>
+            </div>
+
+            {/* Dynamic Configuration fields */}
+            {whatsappRoutingMode === 'agency_concierge' ? (
+              <div className="p-4 bg-white rounded-xl border border-emerald-200 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-800 block mb-1">
+                      Agency Concierge Bot Number (Shared)
+                    </label>
+                    <div className="relative">
+                      <Bot className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600" />
+                      <input
+                        type="text"
+                        value={conciergePhone}
+                        onChange={(e) => setConciergePhone(e.target.value)}
+                        placeholder="+234 803 200 2026"
+                        className="w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      The single WhatsApp bot line operated by your agency for all Kaduna pharmacies.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-800 block mb-1">
+                      Pharmacy Manager / Owner Alert Phone
+                    </label>
+                    <div className="relative">
+                      <Smartphone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="text"
+                        value={managerAlertPhone}
+                        onChange={(e) => setManagerAlertPhone(e.target.value)}
+                        placeholder="+234 803 123 4567"
+                        className="w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      When a patient asks for a refill, the AI pings this number with the customer&apos;s details and order.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Live Dispatch Flow Visualizer */}
+                <div className="p-3.5 bg-slate-900 text-slate-200 rounded-xl space-y-2.5">
+                  <span className="text-[11px] uppercase tracking-wider font-extrabold text-emerald-400 block">
+                    ⚡ Live Concierge Routing Flow
+                  </span>
+                  
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-2 text-xs">
+                    <div className="w-full md:w-1/3 bg-slate-800/90 p-2.5 rounded-lg border border-slate-700">
+                      <div className="flex items-center gap-1.5 text-emerald-400 font-semibold mb-1">
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>1. Patient Scans / Chats</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Scans bag slip QR or clicks link. Embeds <span className="font-mono text-emerald-300">[ref:{activeBusiness.opt_in_slug}]</span>
+                      </p>
+                    </div>
+
+                    <ArrowRight className="w-4 h-4 text-slate-500 hidden md:block shrink-0" />
+
+                    <div className="w-full md:w-1/3 bg-slate-800/90 p-2.5 rounded-lg border border-slate-700">
+                      <div className="flex items-center gap-1.5 text-teal-400 font-semibold mb-1">
+                        <Bot className="w-3.5 h-3.5" />
+                        <span>2. AI Concierge Bot</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Greets as <strong className="text-white">{activeBusiness.name}</strong>, confirms medication request & delivery address.
+                      </p>
+                    </div>
+
+                    <ArrowRight className="w-4 h-4 text-slate-500 hidden md:block shrink-0" />
+
+                    <div className="w-full md:w-1/3 bg-slate-800/90 p-2.5 rounded-lg border border-slate-700">
+                      <div className="flex items-center gap-1.5 text-amber-400 font-semibold mb-1">
+                        <Send className="w-3.5 h-3.5" />
+                        <span>3. WhatsApp Alert to Manager</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Pings {managerAlertPhone || 'Manager Phone'} with customer name, phone, and medications ready for dispatch.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Sample Alert Message */}
+                  <div className="mt-2 p-2.5 bg-slate-950/80 rounded-lg border border-slate-800 text-[11px] font-mono text-slate-300 leading-relaxed">
+                    <div className="text-emerald-400 font-bold mb-1">Sample Manager WhatsApp Alert:</div>
+                    🚨 *NEW REFILL ORDER &mdash; {activeBusiness.name}*<br />
+                    👤 *Patient:* Alhaji Musa (...4821)<br />
+                    💊 *Medications:* Amlodipine 10mg (1 month) &amp; Metformin 500mg<br />
+                    📍 *Address:* Barnawa Phase 2, Kaduna<br />
+                    ⏱️ *Logged:* 28-day refill clock automatically reset. Pack &amp; call patient.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-2">
+                <label className="text-xs font-bold text-slate-800 block mb-1">
+                  Store Counter WhatsApp Number
+                </label>
+                <div className="relative">
+                  <Smartphone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+234 803 123 4567"
+                    className="w-full pl-9 pr-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Patients will chat directly with the person holding this phone. No AI autopilot will assist them.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between pt-3 border-t border-slate-100">

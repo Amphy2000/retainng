@@ -19,6 +19,8 @@ export type ConsentSource =
   | 'manual_entry'
   | 'manual_edit';
 
+export type WhatsAppRoutingMode = 'agency_concierge' | 'store_direct';
+
 export interface Business {
   id: string;
   name: string;
@@ -35,6 +37,10 @@ export interface Business {
   is_demo: boolean;
   created_at: string;
   updated_at?: string;
+  // WhatsApp Multi-Client Gateway Routing Configuration
+  whatsapp_routing_mode?: WhatsAppRoutingMode;
+  manager_alert_phone?: string;
+  concierge_phone?: string;
 }
 
 export interface Customer {
