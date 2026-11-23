@@ -69,17 +69,25 @@ const GREEN_API_ID = process.env.GREEN_API_ID || '710722811593';
 const GREEN_API_TOKEN = process.env.GREEN_API_TOKEN || 'c7cea54f5c6f4d31a9b74eb6576493a8ec085b4f65a04a62b5';
 const GREEN_API_URL = process.env.GREEN_API_URL || 'https://7107.api.greenapi.com';
 
-/** Look up manager phone for any slug — reads from /api/pharmacy-config (no env vars needed) */
+/** Look up manager phone for any slug — reads from /api/pharmacy-config with default fallback */
 async function getManagerPhone(slug: string, host: string): Promise<string> {
+  // Built-in default manager numbers (matches settings)
+  const defaultManagerPhones: Record<string, string> = {
+    'apex-pharmacy': '2349169153129',
+    'danfodio-pharmacy': '2349169153129',
+  };
+
   try {
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const res = await fetch(`${protocol}://${host}/api/pharmacy-config?slug=${encodeURIComponent(slug)}`);
-    if (!res.ok) return '';
-    const data = await res.json();
-    return data?.managerPhone || '';
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.managerPhone) return data.managerPhone.replace(/[^0-9]/g, '');
+    }
   } catch {
-    return '';
+    // fallback below
   }
+  return defaultManagerPhones[slug] || '2349169153129';
 }
 
 async function sendWhatsApp(toPhone: string, message: string): Promise<void> {
@@ -282,6 +290,20 @@ export async function POST(req: NextRequest) {
         `How can we support you today?`;
 
       await sendWhatsApp(cleanPhone, reply);
+
+      // Alert the manager about the new patient onboarded!
+      const managerPhone = await getManagerPhone(activeSlug, host);
+      if (managerPhone) {
+        const onboardAlert =
+          `🎉 *NEW PATIENT LINKED — ${bizDisplay}*\n\n` +
+          `👤 *Patient:* ${profileName || 'Customer'} (WhatsApp: ...${cleanPhone.slice(-4)})\n` +
+          `📱 *Phone:* ${cleanPhone}\n` +
+          `✅ Linked to ${bizDisplay} via Prescription Bag Slip QR.\n` +
+          `⏱️ Next refill reminder clock started.`;
+
+        await sendWhatsApp(managerPhone, onboardAlert);
+      }
+
       return NextResponse.json({ success: true, intent: 'onboard', business: bizDisplay, phone: cleanPhone });
     }
 

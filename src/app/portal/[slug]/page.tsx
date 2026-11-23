@@ -385,33 +385,38 @@ function PortalInner() {
           </button>
         </div>
 
-        {/* ━━━ COUNTER STAND & QR BUTTONS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-3xl p-5 border border-slate-800 shadow-md space-y-3">
+        {/* ━━━ RETENTION CONCIERGE & BAG SLIPS HUB ━━━━━━━━━━━━━━━━━━━ */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-3xl p-6 border border-slate-800 shadow-xl space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <QrCode className="w-5 h-5 text-emerald-400" />
-              <h3 className="font-black text-sm text-white">Your Counter Stand &amp; Barcode</h3>
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+                <QrCode className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="font-black text-sm text-white">Prescription Bag Slips &amp; QR Concierge</h3>
+                <p className="text-[11px] text-slate-400">Zero data entry • 100% automated customer refill retention</p>
+              </div>
             </div>
-            <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full uppercase">
-              1-Tap WhatsApp
+            <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full uppercase tracking-wider">
+              AI Autopilot Active
             </span>
           </div>
 
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Put this stand on your counter. When customers scan it with their phone camera, their WhatsApp opens with a 1-tap check-in message. You never have to type anything!
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Drop these 4-in-1 slips into customer bags. When they scan, their phone links to your store WhatsApp. Our AI concierge automatically reminds them before their medication runs out and routes their refill requests straight to your dispensary.
           </p>
 
-          <div className="grid grid-cols-2 gap-2 pt-1">
+          <div className="grid grid-cols-2 gap-2.5 pt-1">
             <button
               onClick={() => { setPrintMode(true); setQrOpen(true); }}
-              className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+              className="py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-md"
             >
               <Printer className="w-4 h-4" />
-              <span>Print Counter Card</span>
+              <span>Print 4-in-1 Bag Slips</span>
             </button>
             <button
               onClick={() => { setPrintMode(false); setQrOpen(true); }}
-              className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700"
+              className="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer border border-slate-700"
             >
               <QrCode className="w-4 h-4 text-emerald-400" />
               <span>Show QR on Screen</span>
