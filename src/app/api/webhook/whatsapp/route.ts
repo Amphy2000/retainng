@@ -54,12 +54,22 @@ export async function POST(req: NextRequest) {
     }
 
     // Clean phone number (strip whatsapp:, @c.us, @s.whatsapp.net, +, spaces)
-    const cleanPhone = fromNumber
+    let cleanPhone = fromNumber
       .replace(/^whatsapp:/i, '')
       .replace(/@c\.us$/i, '')
       .replace(/@s\.whatsapp\.net$/i, '')
       .replace(/[^0-9]/g, '')
       .trim();
+
+    // Normalize Nigerian 080... format to international 23480...
+    if (cleanPhone.startsWith('0') && cleanPhone.length === 11) {
+      cleanPhone = '234' + cleanPhone.slice(1);
+    }
+
+    // Ignore messages sent by the bot line itself to prevent recursive loops
+    if (cleanPhone === '2349169153129' || cleanPhone.endsWith('2349169153129')) {
+      return NextResponse.json({ ignored: 'self-message' });
+    }
 
     // 1. Check if the message contains an automatic pharmacy reference tag: [ref:slug]
     const refMatch = messageBody.match(/\[ref:([a-zA-Z0-9_-]+)\]/i);
@@ -112,13 +122,13 @@ export async function POST(req: NextRequest) {
 
     // If this webhook came from Green-API (has senderData), send outbound WhatsApp message via Green-API REST API
     const greenApiId = process.env.GREEN_API_ID_INSTANCE || '710722811499';
-    const greenApiToken = process.env.GREEN_API_TOKEN || '';
+    const greenApiToken = process.env.GREEN_API_TOKEN || '98d11063fda64174ae6c50d0401bb2f0569f7f45a0ad49e3ac';
     const greenApiUrl = process.env.GREEN_API_URL || 'https://7107.api.greenapi.com';
 
     if (greenApiToken && cleanPhone) {
       try {
         const chatId = `${cleanPhone}@c.us`;
-        await fetch(`${greenApiUrl}/waInstance${greenApiId}/sendMessage/${greenApiToken}`, {
+        const res = await fetch(`${greenApiUrl}/waInstance${greenApiId}/sendMessage/${greenApiToken}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -126,6 +136,8 @@ export async function POST(req: NextRequest) {
             message: replyText,
           }),
         });
+        const sendResult = await res.json();
+        console.log('Green-API outbound reply sent:', sendResult);
       } catch (sendErr) {
         console.error('Error sending Green-API reply:', sendErr);
       }
