@@ -63,7 +63,12 @@ export function Navbar({ onOpenRecordModal, onOpenQrModal, onBusinessChanged }: 
 
   useEffect(() => {
     const timer = setTimeout(() => refreshBiz(), 0);
-    return () => clearTimeout(timer);
+    const handleSync = () => refreshBiz();
+    window.addEventListener('retainng_fleet_synced', handleSync);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('retainng_fleet_synced', handleSync);
+    };
   }, []);
 
   function handleSelectClient(id: string) {

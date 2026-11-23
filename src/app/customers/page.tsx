@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { getBusinesses, getCustomers } from '@/lib/storage';
 import { formatNgn, formatRelativeTime, getWhatsAppUrl } from '@/lib/utils';
@@ -26,9 +26,16 @@ export default function CustomersPage() {
 
   const [search, setSearch] = useState('');
   const [selectedBizFilter, setSelectedBizFilter] = useState<string>('all');
+  const [syncVersion, setSyncVersion] = useState(0);
+
+  useEffect(() => {
+    const handleSync = () => setSyncVersion((v) => v + 1);
+    window.addEventListener('retainng_fleet_synced', handleSync);
+    return () => window.removeEventListener('retainng_fleet_synced', handleSync);
+  }, []);
 
   // Load all businesses
-  const allBusinesses = useMemo(() => getBusinesses(), []);
+  const allBusinesses = useMemo(() => getBusinesses(), [syncVersion]);
 
   // Selected business object
   const selectedBizObj = useMemo(() => {

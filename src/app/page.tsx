@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useIsMounted } from '@/lib/useMounted';
 import { formatNgn, formatRelativeTime } from '@/lib/utils';
@@ -34,11 +34,18 @@ export default function AgencyRadarPage() {
   const { openQrModal } = useApp();
   const mounted = useIsMounted();
   const [selectedBiz, setSelectedBiz] = useState<string>('all');
+  const [syncVersion, setSyncVersion] = useState(0);
+
+  useEffect(() => {
+    const handleSync = () => setSyncVersion((v) => v + 1);
+    window.addEventListener('retainng_fleet_synced', handleSync);
+    return () => window.removeEventListener('retainng_fleet_synced', handleSync);
+  }, []);
 
   const allBusinesses = useMemo(() => {
     if (!mounted) return [];
     return getBusinesses();
-  }, [mounted]);
+  }, [mounted, syncVersion]);
 
   // Aggregate metrics across entire fleet or a single business
   const data = useMemo(() => {

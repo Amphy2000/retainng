@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Business, Customer, SaleOrVisit } from '@/types';
-import { getActiveBusiness, getCustomers, getSales } from '@/lib/storage';
+import { getActiveBusiness, getCustomers, getSales, syncFleetFromCloud } from '@/lib/storage';
 
 interface AppContextType {
   activeBusiness: Business | null;
@@ -46,10 +46,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    // Initial immediate load from local cache
+    refreshData();
+
+    // Fetch latest cloud state from Supabase across all devices
+    syncFleetFromCloud().then(() => {
       refreshData();
-    }, 0);
-    return () => clearTimeout(timer);
+    });
+
+    // Listen for cloud sync events
+    const handleSync = () => {
+      refreshData();
+    };
+    window.addEventListener('retainng_fleet_synced', handleSync);
+    return () => window.removeEventListener('retainng_fleet_synced', handleSync);
   }, []);
 
   function openRecordSaleModal(custId?: string) {

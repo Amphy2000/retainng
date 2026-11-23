@@ -123,9 +123,15 @@ export function createBusiness(data: Omit<Business, 'id' | 'created_at' | 'opt_i
     .replace(/(^-|-$)/g, '');
   const uniqueSlug = `${slugBase}-${Math.random().toString(36).substring(2, 6)}`;
 
+  // Generate valid standard UUID for Supabase compatibility
+  const newId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : 'a' + Math.random().toString(36).substring(2, 10) + '-0000-0000-0000-' + Date.now().toString(16).padStart(12, '0');
+
   const newBiz: Business = {
     ...data,
-    id: `biz_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: newId,
     currency: 'NGN',
     timezone: data.timezone || 'Africa/Lagos',
     opt_in_slug: uniqueSlug,
@@ -136,6 +142,16 @@ export function createBusiness(data: Omit<Business, 'id' | 'created_at' | 'opt_i
   const updated = [...businesses, newBiz];
   setStored(STORAGE_KEYS.BUSINESSES, updated);
   setActiveBusiness(newBiz.id);
+
+  // Sync to Cloud Supabase
+  if (typeof window !== 'undefined') {
+    fetch('/api/fleet-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'create_business', payload: newBiz }),
+    }).catch((e) => console.warn('Cloud sync error on createBusiness:', e));
+  }
+
   return newBiz;
 }
 
@@ -143,7 +159,85 @@ export function updateBusiness(id: string, updates: Partial<Business>): Business
   const businesses = getBusinesses();
   const updated = businesses.map((b) => (b.id === id ? { ...b, ...updates, updated_at: new Date().toISOString() } : b));
   setStored(STORAGE_KEYS.BUSINESSES, updated);
+
+  // Sync updates to Cloud Supabase
+  if (typeof window !== 'undefined') {
+    fetch('/api/fleet-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_business', payload: { id, updates } }),
+    }).catch((e) => console.warn('Cloud sync error on updateBusiness:', e));
+  }
+
   return updated.find((b) => b.id === id) || businesses[0];
+}
+
+// ----------------------------------------------------------------------------
+// CLOUD FLEET SYNCHRONIZATION (SUPABASE)
+// ----------------------------------------------------------------------------
+export async function syncFleetFromCloud(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch('/api/fleet-sync');
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data.success) return false;
+
+    // 1. Merge cloud businesses
+    if (data.businesses && Array.isArray(data.businesses) && data.businesses.length > 0) {
+      const local = getStored<Business[]>(STORAGE_KEYS.BUSINESSES, INITIAL_BUSINESSES);
+      const merged: Business[] = [...local];
+      data.businesses.forEach((cloudBiz: Business) => {
+        const existingIdx = merged.findIndex(
+          (b) => b.id === cloudBiz.id || b.opt_in_slug === cloudBiz.opt_in_slug
+        );
+        if (existingIdx >= 0) {
+          merged[existingIdx] = { ...merged[existingIdx], ...cloudBiz };
+        } else {
+          merged.push(cloudBiz);
+        }
+      });
+      setStored(STORAGE_KEYS.BUSINESSES, merged);
+    }
+
+    // 2. Merge cloud customers
+    if (data.customers && Array.isArray(data.customers) && data.customers.length > 0) {
+      const localCusts = getStored<Customer[]>(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
+      const mergedCusts = [...localCusts];
+      data.customers.forEach((cloudCust: Customer) => {
+        const existingIdx = mergedCusts.findIndex(
+          (c) => c.id === cloudCust.id || (c.phone === cloudCust.phone && c.business_id === cloudCust.business_id)
+        );
+        if (existingIdx >= 0) {
+          mergedCusts[existingIdx] = { ...mergedCusts[existingIdx], ...cloudCust };
+        } else {
+          mergedCusts.unshift(cloudCust);
+        }
+      });
+      setStored(STORAGE_KEYS.CUSTOMERS, mergedCusts);
+    }
+
+    // 3. Merge cloud sales
+    if (data.sales && Array.isArray(data.sales) && data.sales.length > 0) {
+      const localSales = getStored<SaleOrVisit[]>(STORAGE_KEYS.SALES, INITIAL_SALES);
+      const mergedSales = [...localSales];
+      data.sales.forEach((cloudSale: SaleOrVisit) => {
+        const existingIdx = mergedSales.findIndex((s) => s.id === cloudSale.id);
+        if (existingIdx >= 0) {
+          mergedSales[existingIdx] = { ...mergedSales[existingIdx], ...cloudSale };
+        } else {
+          mergedSales.unshift(cloudSale);
+        }
+      });
+      setStored(STORAGE_KEYS.SALES, mergedSales);
+    }
+
+    window.dispatchEvent(new CustomEvent('retainng_fleet_synced'));
+    return true;
+  } catch (err) {
+    console.warn('syncFleetFromCloud failed:', err);
+    return false;
+  }
 }
 
 export function getBusinessBySlug(slug: string): Business | undefined {
