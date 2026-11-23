@@ -130,25 +130,25 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* WhatsApp Bot Live Status */}
+      {/* WhatsApp Bot & Database Live Status */}
       <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-emerald-400 font-bold text-xs flex items-center gap-1">
               <Bot className="w-4 h-4" />
-              WhatsApp AI Concierge — Live Status
+              WhatsApp AI Concierge &amp; Supabase Cloud Database — Live
             </span>
           </div>
           <p className="text-xs text-slate-300 mt-1 max-w-xl">
-            Bot number <strong className="text-white">+234 703 267 3310</strong> is active on Green-API and listening 24/7.
-            New patient scans trigger instant manager alerts. Refill keywords trigger AI dispatch. Monthly reports auto-fire on the 1st.
+            Bot number <strong className="text-white">+234 703 267 3310</strong> is active on Green-API and synced to Supabase PostgreSQL (<code className="text-emerald-300 font-mono text-[11px]">vxinwmcdkghpvrwkdzbe</code>).
+            Patient scans and refill orders are permanently stored and backed up in real time.
           </p>
         </div>
 
         <div className="shrink-0">
           <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Bot Online
+            Supabase Connected
           </span>
         </div>
       </div>
