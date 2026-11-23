@@ -280,6 +280,7 @@ function PortalInner() {
                   <div className="grid grid-cols-2 gap-2">
                     {customers.slice(0, 4).map((c) => {
                       const tag = c.tags?.[0] || 'Regular Visit';
+                      const last4 = c.phone ? c.phone.replace(/\D/g, '').slice(-4) : '';
                       return (
                         <button
                           key={c.id}
@@ -287,11 +288,19 @@ function PortalInner() {
                           onClick={() => handleInstantPatientCheckin(c)}
                           className="p-2.5 rounded-2xl bg-slate-50 hover:bg-emerald-50 active:bg-emerald-100 border border-slate-200 hover:border-emerald-400 text-left transition group cursor-pointer shadow-2xs"
                         >
-                          <div className="text-xs font-black text-slate-900 group-hover:text-emerald-900 truncate">
-                            {c.full_name}
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs font-black text-slate-900 group-hover:text-emerald-900 truncate">
+                              {c.full_name}
+                            </span>
+                            {last4 && (
+                              <span className="text-[10px] font-mono font-bold text-slate-400 group-hover:text-emerald-700 shrink-0">
+                                ...{last4}
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[10px] text-slate-500 group-hover:text-emerald-700 truncate mt-0.5 font-medium">
-                            {tag}
+                          <div className="text-[10px] text-slate-500 group-hover:text-emerald-700 truncate mt-0.5 font-medium flex items-center justify-between">
+                            <span>{tag}</span>
+                            <span className="text-[9px] text-slate-400">{c.phone}</span>
                           </div>
                         </button>
                       );
