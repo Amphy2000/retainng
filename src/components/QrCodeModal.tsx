@@ -20,16 +20,28 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
   const [optInUrl, setOptInUrl] = useState<string>('');
   const [showPrintCard, setShowPrintCard] = useState(initialShowPrintCard);
   const [qrMode, setQrMode] = useState<'web' | 'whatsapp'>('web');
+  const [printLayout, setPrintLayout] = useState<'stand' | 'bag_slips'>('stand');
 
   // Customizable Stand Card Incentive Hooks (Solves "What if business doesn't want to offer discounts")
-  const [incentiveType, setIncentiveType] = useState<'free_perk' | 'wifi' | 'vip' | 'discount' | 'receipt' | 'custom'>('free_perk');
+  const [incentiveType, setIncentiveType] = useState<
+    'free_perk' | 'wifi' | 'vip' | 'discount' | 'receipt' | 'pharm_refill' | 'pharm_delivery' | 'pharm_care' | 'custom'
+  >('free_perk');
   const [customBadge, setCustomBadge] = useState('🎁 EXCLUSIVE CUSTOMER PERK');
   const [customOfferText, setCustomOfferText] = useState('Scan with your phone camera to claim your Free Treatment Perk & priority booking!');
 
   // Presets
-  function applyIncentivePreset(type: 'free_perk' | 'wifi' | 'vip' | 'discount' | 'receipt' | 'custom') {
+  function applyIncentivePreset(type: 'free_perk' | 'wifi' | 'vip' | 'discount' | 'receipt' | 'pharm_refill' | 'pharm_delivery' | 'pharm_care' | 'custom') {
     setIncentiveType(type);
-    if (type === 'free_perk') {
+    if (type === 'pharm_refill') {
+      setCustomBadge('💊 VIP REFILL & ADHERENCE');
+      setCustomOfferText('Scan to get automated 28-day WhatsApp refill reminders before your routine medications finish!');
+    } else if (type === 'pharm_delivery') {
+      setCustomBadge('🛵 FREE HOME DELIVERY');
+      setCustomOfferText('Scan to activate free doorstep delivery on your monthly routine prescriptions!');
+    } else if (type === 'pharm_care') {
+      setCustomBadge('🩺 PHARMACIST CLINICAL CARE');
+      setCustomOfferText('Scan to register for free recovery follow-up & direct pharmacist advice!');
+    } else if (type === 'free_perk') {
       setCustomBadge('🎁 EXCLUSIVE CUSTOMER PERK');
       setCustomOfferText('Scan with phone to claim your Free Treatment Perk (Hair Wash, Beard Oil, or Tyre Shine)!');
     } else if (type === 'wifi') {
@@ -59,6 +71,11 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
 
       if (!biz) return; // Guard: no active business yet
 
+      const isPharmacy = biz.business_type === 'pharmacy' || biz.name.toLowerCase().includes('pharm');
+      if (isPharmacy && incentiveType === 'free_perk') {
+        applyIncentivePreset('pharm_refill');
+      }
+
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
       const webUrl = `${origin}/opt-in/${biz.opt_in_slug}`;
 
@@ -66,7 +83,10 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
       if (qrMode === 'whatsapp') {
         const digits = (biz.phone || '08000000000').replace(/\D/g, '');
         const intlPhone = digits.startsWith('0') ? `234${digits.slice(1)}` : digits;
-        finalUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(`Hello ${biz.name}! I am at your shop and checking in today!`)}`;
+        const msg = isPharmacy
+          ? `Hello ${biz.name}! Please enroll me for VIP Refill Reminders and Pharmacist Care.`
+          : `Hello ${biz.name}! I am at your shop and checking in today!`;
+        finalUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
       }
 
       setOptInUrl(finalUrl);
@@ -158,6 +178,28 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
         {/* Content */}
         {showPrintCard ? (
           <div className="p-4 sm:p-5 text-center space-y-3.5 overflow-y-auto flex-1">
+            {/* Print Format Toggle: Stand vs Bag Slips */}
+            <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setPrintLayout('stand')}
+                className={`flex-1 py-1.5 rounded-lg transition cursor-pointer ${
+                  printLayout === 'stand' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🪧 Counter Stand (Table Tent)
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintLayout('bag_slips')}
+                className={`flex-1 py-1.5 rounded-lg transition cursor-pointer ${
+                  printLayout === 'bag_slips' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-emerald-700'
+                }`}
+              >
+                📄 Bag Slips (4-in-1 A4 Page)
+              </button>
+            </div>
+
             {/* Customizable Incentive Hook Bar */}
             <div className="text-left space-y-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block">
@@ -165,6 +207,13 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
               </span>
               <div className="flex flex-wrap gap-1.5">
                 {[
+                  ...(business.business_type === 'pharmacy' || business.name.toLowerCase().includes('pharm')
+                    ? [
+                        { id: 'pharm_refill', label: '💊 Refill Reminders' },
+                        { id: 'pharm_delivery', label: '🛵 Home Delivery' },
+                        { id: 'pharm_care', label: '🩺 Clinical Care' },
+                      ]
+                    : []),
                   { id: 'free_perk', label: '🎁 Free Treatment Perk' },
                   { id: 'wifi', label: '📶 Free Wi-Fi' },
                   { id: 'vip', label: '⭐ VIP Priority' },
@@ -175,7 +224,20 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => applyIncentivePreset(item.id as 'free_perk' | 'wifi' | 'vip' | 'discount' | 'receipt' | 'custom')}
+                    onClick={() =>
+                      applyIncentivePreset(
+                        item.id as
+                          | 'free_perk'
+                          | 'wifi'
+                          | 'vip'
+                          | 'discount'
+                          | 'receipt'
+                          | 'pharm_refill'
+                          | 'pharm_delivery'
+                          | 'pharm_care'
+                          | 'custom'
+                      )
+                    }
                     className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition cursor-pointer ${
                       incentiveType === item.id
                         ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
@@ -199,39 +261,77 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
               </div>
             </div>
 
-            {/* The Actual Printable Tent Card Canvas */}
-            <div className="border-4 border-slate-900 rounded-3xl p-5 bg-white shadow-lg space-y-2.5 print:border-black print:m-0">
-              <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-black text-base flex items-center justify-center mx-auto">
-                ₦
-              </div>
-              <h2 className="text-base sm:text-lg font-black uppercase tracking-tight text-slate-900">
-                {business.name}
-              </h2>
-              <div className="py-0.5 px-3 bg-emerald-50 rounded-full inline-block border border-emerald-200">
-                <span className="text-[11px] font-bold text-emerald-800">
-                  {customBadge}
-                </span>
-              </div>
-              <p className="text-xs text-slate-700 max-w-xs mx-auto font-medium leading-relaxed">
-                {customOfferText}
-              </p>
+            {/* The Actual Printable Canvas */}
+            {printLayout === 'stand' ? (
+              <div className="border-4 border-slate-900 rounded-3xl p-5 bg-white shadow-lg space-y-2.5 print:border-black print:m-0">
+                <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-black text-base flex items-center justify-center mx-auto">
+                  ₦
+                </div>
+                <h2 className="text-base sm:text-lg font-black uppercase tracking-tight text-slate-900">
+                  {business.name}
+                </h2>
+                <div className="py-0.5 px-3 bg-emerald-50 rounded-full inline-block border border-emerald-200">
+                  <span className="text-[11px] font-bold text-emerald-800">
+                    {customBadge}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-700 max-w-xs mx-auto font-medium leading-relaxed">
+                  {customOfferText}
+                </p>
 
-              {/* QR Code */}
-              <div className="p-2.5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl inline-block">
-                {qrDataUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={qrDataUrl}
-                    alt={`Counter QR for ${business.name}`}
-                    className="w-40 h-40 sm:w-44 sm:h-44 mx-auto"
-                  />
-                )}
-              </div>
+                {/* QR Code */}
+                <div className="p-2.5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl inline-block">
+                  {qrDataUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={qrDataUrl}
+                      alt={`Counter QR for ${business.name}`}
+                      className="w-40 h-40 sm:w-44 sm:h-44 mx-auto"
+                    />
+                  )}
+                </div>
 
-              <div className="text-[10px] text-slate-500 font-medium">
-                Point phone camera here • No app download required
+                <div className="text-[10px] text-slate-500 font-medium">
+                  Point phone camera here • No app download required
+                </div>
               </div>
-            </div>
+            ) : (
+              /* 4-per-A4 Bag Slips Layout */
+              <div className="space-y-2">
+                <p className="text-[11px] text-slate-500 font-medium text-left">
+                  ✂️ <strong>Prescription Bag Slips:</strong> Print and cut into 4 slips. Staff simply drops one slip into the patient&apos;s medicine bag at checkout. Zero staff typing!
+                </p>
+                <div className="grid grid-cols-2 gap-2 border-2 border-dashed border-slate-300 p-2 rounded-2xl bg-white print:border-none print:p-0">
+                  {[1, 2, 3, 4].map((slip) => (
+                    <div
+                      key={slip}
+                      className="border border-slate-300 rounded-xl p-3 bg-slate-50/50 space-y-1.5 text-center print:border-black print:p-4"
+                    >
+                      <div className="text-[11px] font-black uppercase text-slate-900 truncate">
+                        {business.name}
+                      </div>
+                      <div className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 inline-block">
+                        {customBadge}
+                      </div>
+                      <p className="text-[9px] text-slate-600 line-clamp-2 leading-tight">
+                        {customOfferText}
+                      </p>
+                      {qrDataUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={qrDataUrl}
+                          alt="Bag QR"
+                          className="w-20 h-20 mx-auto border border-slate-200 rounded p-1 bg-white"
+                        />
+                      )}
+                      <div className="text-[8px] text-slate-400 font-medium">
+                        Scan with camera or WhatsApp
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-2 pt-1">
               <button
@@ -247,7 +347,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                 className="flex-1 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
-                <span>Print This Card</span>
+                <span>{printLayout === 'stand' ? 'Print Stand Card' : 'Print 4 Bag Slips'}</span>
               </button>
             </div>
           </div>
