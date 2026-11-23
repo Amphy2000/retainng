@@ -131,11 +131,11 @@ function OptInFormContent() {
 
   const categoryOptions = isPharmacy
     ? [
-        { id: 'Refill (BP/Hypertension)', label: '💊 BP / Hypertension', desc: '28-Day Refill Alert' },
-        { id: 'Refill (Diabetes/Sugar)', label: '🩸 Diabetes & Sugar', desc: '28-Day Refill Alert' },
-        { id: 'Acute Care (Malaria/Infection)', label: '🌡️ Acute Care / Malaria', desc: 'Recovery Follow-up' },
-        { id: 'Family & OTC', label: '👶 Family & Vitamins', desc: 'Monthly Essentials' },
-        { id: 'Home Delivery', label: '🛵 Home Delivery', desc: 'Discreet Dispatch' },
+        { id: 'Refill (Chronic Rx)', label: '💊 Chronic Refill', desc: 'BP, Sugar, Ulcer, Pain' },
+        { id: 'Mother & Baby Care', label: '👶 Mother & Baby', desc: 'Formula, Diapers, Kids' },
+        { id: 'Wellness & Supplements', label: '✨ Wellness & Vitamins', desc: 'Cod Liver, Skin, Energy' },
+        { id: 'Acute Care (Prescriptions)', label: '🌡️ Acute Care', desc: 'Malaria, Antibiotics, Pain' },
+        { id: 'Home Delivery', label: '🛵 Doorstep Delivery', desc: 'Fast discreet dispatch' },
       ]
     : isGrooming
     ? [
