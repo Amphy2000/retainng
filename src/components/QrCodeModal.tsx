@@ -29,6 +29,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
     | 'vip'
     | 'discount'
     | 'receipt'
+    | 'pharm_universal'
     | 'pharm_bp_voucher'
     | 'pharm_refill'
     | 'pharm_delivery'
@@ -46,6 +47,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
       | 'vip'
       | 'discount'
       | 'receipt'
+      | 'pharm_universal'
       | 'pharm_bp_voucher'
       | 'pharm_refill'
       | 'pharm_delivery'
@@ -53,7 +55,10 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
       | 'custom'
   ) {
     setIncentiveType(type);
-    if (type === 'pharm_bp_voucher') {
+    if (type === 'pharm_universal') {
+      setCustomBadge('🎁 VIP HEALTH & WELLNESS PASS');
+      setCustomOfferText('Scan with your phone to claim your Free Health Check (BP/Sugar/Weight) + ₦500 Off or Free Delivery!');
+    } else if (type === 'pharm_bp_voucher') {
       setCustomBadge('🩺 FREE BP & SUGAR CHECK VOUCHER');
       setCustomOfferText('Scan with phone to claim a Free Blood Pressure & Sugar Check on your next visit + VIP refill alerts!');
     } else if (type === 'pharm_refill') {
@@ -96,8 +101,8 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
       if (!biz) return; // Guard: no active business yet
 
       const isPharmacy = biz.business_type === 'pharmacy' || biz.name.toLowerCase().includes('pharm');
-      if (isPharmacy && (incentiveType === 'free_perk' || incentiveType === 'pharm_refill')) {
-        applyIncentivePreset('pharm_bp_voucher');
+      if (isPharmacy && (incentiveType === 'free_perk' || incentiveType === 'pharm_refill' || incentiveType === 'pharm_bp_voucher')) {
+        applyIncentivePreset('pharm_universal');
       }
 
       const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
@@ -233,6 +238,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                 {[
                   ...(business.business_type === 'pharmacy' || business.name.toLowerCase().includes('pharm')
                     ? [
+                        { id: 'pharm_universal', label: '🎁 Universal VIP Pass' },
                         { id: 'pharm_bp_voucher', label: '🩺 Free BP/Sugar Check' },
                         { id: 'pharm_refill', label: '💊 Refill Reminders' },
                         { id: 'pharm_delivery', label: '🛵 Home Delivery' },
@@ -345,9 +351,26 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                         </div>
                       </div>
 
-                      <p className="text-[10px] text-slate-700 leading-tight font-medium px-1">
-                        {customOfferText}
-                      </p>
+                      {business.business_type === 'pharmacy' || business.name.toLowerCase().includes('pharm') ? (
+                        <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2 text-left space-y-1 text-[9px] text-slate-700">
+                          <div className="flex items-center gap-1.5 font-bold text-emerald-800">
+                            <span className="text-emerald-600 shrink-0">✓</span>
+                            <span>Free Health Check (BP, Sugar, or Weight)</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 font-bold text-emerald-800">
+                            <span className="text-emerald-600 shrink-0">✓</span>
+                            <span>Direct Pharmacist WhatsApp Consultation</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 font-bold text-emerald-800">
+                            <span className="text-emerald-600 shrink-0">✓</span>
+                            <span>Automatic Refill & Baby Supply Reminders</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-700 leading-tight font-medium px-1">
+                          {customOfferText}
+                        </p>
+                      )}
 
                       <div className="py-1">
                         {qrDataUrl && (

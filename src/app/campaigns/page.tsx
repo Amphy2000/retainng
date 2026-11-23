@@ -171,21 +171,25 @@ function CampaignContent() {
             (c.tags || []).some((t) => t.toLowerCase().includes('acute') || t.toLowerCase().includes('malaria') || t.toLowerCase().includes('antibiotic')) ||
             (c.notes || '').toLowerCase().includes('acute') ||
             (c.notes || '').toLowerCase().includes('malaria');
-          const isFamily =
-            (c.tags || []).some((t) => t.toLowerCase().includes('family') || t.toLowerCase().includes('otc') || t.toLowerCase().includes('vitamin')) ||
-            (c.notes || '').toLowerCase().includes('vitamin');
+          const isBaby =
+            (c.tags || []).some((t) => t.toLowerCase().includes('baby') || t.toLowerCase().includes('mother'));
+          const isWellness =
+            (c.tags || []).some((t) => t.toLowerCase().includes('wellness') || t.toLowerCase().includes('supplement') || t.toLowerCase().includes('vitamin'));
 
           if (isAcute && diff <= 10) {
             reason = `Care Follow-up (${diff}d post-treatment)`;
-            message = `Hello ${firstName}! 🩺 Checking in from ${b.name}. We hope you are completing your prescribed dose and feeling much stronger today! If you have any questions about your medication or recovery, reply here to consult our Pharmacist directly.`;
-          } else if (isFamily) {
+            message = `Hello ${firstName}! 🩺 Checking in from ${b.name}. We hope you are completing your prescribed course and feeling much stronger today! If you have any questions about your medication or recovery, reply here to consult our Pharmacist directly.`;
+          } else if (isBaby) {
+            reason = `Baby supplies restock (${diff}d)`;
+            message = `Good day ${firstName}! 👶 From ${b.name}: Hope you and baby are doing well! It's about time to replenish your baby formula, diapers, or kids' essentials. Reply here with what you need and we will have it packed or dispatched to your door!`;
+          } else if (isWellness) {
             reason = `Wellness restock (${diff}d)`;
-            message = `Hello ${firstName}! ✨ Family wellness check-in from ${b.name}. It's time to restock your household first aid, vitamins, and healthcare essentials. Reply here to check availability or request delivery!`;
+            message = `Hello ${firstName}! ✨ Wellness check-in from ${b.name}. If your daily vitamins or supplements are running low (last 5-7 days), reply here with your order so you don't miss a day of your routine!`;
           } else {
             reason = `Monthly Refill due (${diff}d)`;
             message = aiTone === 'executive'
-              ? `Good day ${firstName}. From ${b.name}: your ${cadence}-day prescription refill review is ready. Reply to confirm counter pickup or request doorstep delivery.`
-              : `Hello ${firstName}! 💊 This is ${b.name}. Your monthly medication refill window is now open. Reply here and we will prepare it for quick pickup or delivery!`;
+              ? `Good day ${firstName}. From ${b.name}: your monthly prescription refill review is ready. Reply here with your medications to confirm counter pickup or request doorstep dispatch.`
+              : `Hello ${firstName}! 💊 This is ${b.name}. Your monthly routine medication refill window is now open. Reply here with what you need and we will prepare it for quick pickup or delivery!`;
           }
         } else if (b.business_type === 'salon') {
           reason = `Styling due (${diff}d since visit)`;
