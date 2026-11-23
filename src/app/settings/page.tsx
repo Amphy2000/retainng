@@ -130,31 +130,25 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* Supabase & RLS Infrastructure Indicator */}
+      {/* WhatsApp Bot Live Status */}
       <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-emerald-400 font-bold text-xs flex items-center gap-1">
-              <ShieldCheck className="w-4 h-4" />
-              Multi-Tenant Architecture Status
+              <Bot className="w-4 h-4" />
+              WhatsApp AI Concierge — Live Status
             </span>
           </div>
           <p className="text-xs text-slate-300 mt-1 max-w-xl">
-            {isSupabaseConfigured
-              ? 'Connected to Supabase PostgreSQL with Row Level Security (RLS) active.'
-              : 'Running in self-contained interactive storage mode with complete Supabase SQL migrations ready in supabase/migrations/20261121_initial_schema.sql.'}
+            Bot number <strong className="text-white">+234 703 267 3310</strong> is active on Green-API and listening 24/7.
+            New patient scans trigger instant manager alerts. Refill keywords trigger AI dispatch. Monthly reports auto-fire on the 1st.
           </p>
         </div>
 
         <div className="shrink-0">
-          <span
-            className={`px-3 py-1 rounded-full text-xs font-semibold ${
-              isSupabaseConfigured
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-            }`}
-          >
-            {isSupabaseConfigured ? 'Supabase Connected' : 'Local Storage Mode'}
+          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Bot Online
           </span>
         </div>
       </div>

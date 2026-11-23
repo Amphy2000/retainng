@@ -51,6 +51,7 @@ export interface Customer {
   email?: string;
   tags: string[];
   notes?: string;
+  address?: string;
   consent_status: ConsentStatus;
   consent_source?: ConsentSource;
   consent_date?: string;
