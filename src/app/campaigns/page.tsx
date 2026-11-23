@@ -167,10 +167,26 @@ function CampaignContent() {
         let reason = '';
 
         if (b.business_type === 'pharmacy') {
-          reason = `Refill due (${diff}d since last)`;
-          message = aiTone === 'executive'
-            ? `Good day ${firstName}. From ${b.name}: your ${cadence}-day prescription refill review is ready. Reply to confirm pickup or request doorstep delivery.`
-            : `Hello ${firstName}! 💊 This is ${b.name}. Your monthly medication refill window is now open. Reply here and we will prepare it for quick pickup or delivery!`;
+          const isAcute =
+            (c.tags || []).some((t) => t.toLowerCase().includes('acute') || t.toLowerCase().includes('malaria') || t.toLowerCase().includes('antibiotic')) ||
+            (c.notes || '').toLowerCase().includes('acute') ||
+            (c.notes || '').toLowerCase().includes('malaria');
+          const isFamily =
+            (c.tags || []).some((t) => t.toLowerCase().includes('family') || t.toLowerCase().includes('otc') || t.toLowerCase().includes('vitamin')) ||
+            (c.notes || '').toLowerCase().includes('vitamin');
+
+          if (isAcute && diff <= 10) {
+            reason = `Care Follow-up (${diff}d post-treatment)`;
+            message = `Hello ${firstName}! 🩺 Checking in from ${b.name}. We hope you are completing your prescribed dose and feeling much stronger today! If you have any questions about your medication or recovery, reply here to consult our Pharmacist directly.`;
+          } else if (isFamily) {
+            reason = `Wellness restock (${diff}d)`;
+            message = `Hello ${firstName}! ✨ Family wellness check-in from ${b.name}. It's time to restock your household first aid, vitamins, and healthcare essentials. Reply here to check availability or request delivery!`;
+          } else {
+            reason = `Monthly Refill due (${diff}d)`;
+            message = aiTone === 'executive'
+              ? `Good day ${firstName}. From ${b.name}: your ${cadence}-day prescription refill review is ready. Reply to confirm counter pickup or request doorstep delivery.`
+              : `Hello ${firstName}! 💊 This is ${b.name}. Your monthly medication refill window is now open. Reply here and we will prepare it for quick pickup or delivery!`;
+          }
         } else if (b.business_type === 'salon') {
           reason = `Styling due (${diff}d since visit)`;
           message = aiTone === 'trendy'

@@ -40,7 +40,12 @@ const BIZ_SERVICES: Record<string, string[]> = {
   salon: ['Braids & Weave', 'Wig Install', 'Wash & Blowdry', 'Nails & Pedicure'],
   laundry: ['Dry Cleaning', 'Wash & Fold', 'Native Attire', 'Bedding / Duvet'],
   car_wash: ['Exterior Wash', 'Interior Steam', 'Engine Polish', 'Full VIP Detail'],
-  pharmacy: ['Prescription Refill', 'OTC Medication', 'Wellness Consult', 'Home Delivery'],
+  pharmacy: [
+    '💊 Monthly Refill (BP, Diabetes, Routine)',
+    '🌡️ Acute Care (Malaria, Antibiotics, Pain)',
+    '👶 Family & OTC (Vitamins, Baby, First Aid)',
+    '🛵 Home Delivery Order',
+  ],
   clinic: ['Doctor Consult', 'Routine Checkup', 'Lab Test', 'Follow-up Visit'],
   other: ['Standard Service', 'Product Purchase', 'VIP Package', 'Consultation'],
 };

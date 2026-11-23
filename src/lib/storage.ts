@@ -32,7 +32,7 @@ const STORAGE_KEYS = {
 };
 
 // Bump this whenever the data shape changes in a breaking way
-const CURRENT_SCHEMA_VERSION = '5';
+const CURRENT_SCHEMA_VERSION = '6';
 
 // Safe localStorage access helper
 function getStored<T>(key: string, fallback: T): T {
