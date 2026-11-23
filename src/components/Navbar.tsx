@@ -76,18 +76,14 @@ export function Navbar({ onOpenRecordModal, onOpenQrModal, onBusinessChanged }: 
   if (isPublicPage) return null;
 
   const agencyNavItems = [
-    { label: 'Agency HQ', href: '/', icon: LayoutDashboard },
-    { label: 'AI Autopilot', href: '/campaigns', icon: Bot },
-    { label: 'Customers', href: '/customers', icon: Users },
-    { label: 'Analytics', href: '/sales', icon: BarChart2 },
+    { label: 'Agency Radar', href: '/', icon: LayoutDashboard },
+    { label: 'Clients & Bag Slips', href: '/customers', icon: Users },
     { label: 'Settings', href: '/settings', icon: Settings },
   ];
 
   const mobileBottomNav = [
-    { label: 'HQ', href: '/', icon: LayoutDashboard },
-    { label: 'AI', href: '/campaigns', icon: Bot },
-    { label: 'Customers', href: '/customers', icon: Users },
-    { label: 'Analytics', href: '/sales', icon: BarChart2 },
+    { label: 'Radar', href: '/', icon: LayoutDashboard },
+    { label: 'Clients', href: '/customers', icon: Users },
     { label: 'Settings', href: '/settings', icon: Settings },
   ];
 
