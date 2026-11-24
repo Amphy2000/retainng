@@ -614,9 +614,12 @@ LANG: [ha | yo | ig | ar | en]`;
     // 1. Send the text reply
     await sendWhatsApp(cleanPhone, aiReply);
 
-    // 2. Deliver voice note if patient sent voice or asked for audio
+    // 2. Deliver voice note if patient sent voice, asked for audio, or speaks local dialect
     if (
       isVoiceInput ||
+      detectedLang === 'ha' ||
+      detectedLang === 'yo' ||
+      detectedLang === 'ig' ||
       messageBody.toLowerCase().includes('voice') ||
       messageBody.toLowerCase().includes('audio') ||
       messageBody.toLowerCase().includes('murya')
@@ -626,6 +629,44 @@ LANG: [ha | yo | ig | ar | en]`;
         aiReply.slice(0, 200)
       )}`;
       await sendWhatsAppVoice(cleanPhone, voiceUrl);
+    }
+
+    // 3. Persist the customer's language preference to Supabase
+    if (supabaseAdmin && detectedLang) {
+      const client = supabaseAdmin;
+      const langTag =
+        detectedLang === 'ha'
+          ? 'Lang:Hausa'
+          : detectedLang === 'yo'
+          ? 'Lang:Yoruba'
+          : detectedLang === 'ig'
+          ? 'Lang:Igbo'
+          : detectedLang === 'ar'
+          ? 'Lang:Arabic'
+          : 'Lang:English';
+
+      try {
+        const { data: cData } = await client
+          .from('customers')
+          .select('id, tags')
+          .eq('phone', `+${cleanPhone}`)
+          .maybeSingle();
+
+        if (cData) {
+          const currentTags = cData.tags || [];
+          const updatedTags = currentTags.filter((t: string) => !t.startsWith('Lang:'));
+          updatedTags.push(langTag);
+          if (isVoiceInput && !updatedTags.includes('Prefers-Voice')) {
+            updatedTags.push('Prefers-Voice');
+          }
+          await client
+            .from('customers')
+            .update({ tags: updatedTags, updated_at: new Date().toISOString() })
+            .eq('id', cData.id);
+        }
+      } catch (err) {
+        console.warn('Lang persistence error:', err);
+      }
     }
 
     // Send manager dispatch alert for refill orders
