@@ -885,58 +885,6 @@ function SettingsContent() {
           </div>
         </form>
       </div>
-
-      {/* Demo Data Management */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-2xs space-y-3">
-        <h3 className="font-bold text-base text-slate-900">Data Management & Demo Mode</h3>
-        <p className="text-xs text-slate-500">
-          Easily test features using sample Nigerian SMEs, or wipe sample records to begin entering your own genuine customer data.
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-            <span className="font-semibold text-xs text-slate-800 block">Reset Sample Data</span>
-            <p className="text-[11px] text-slate-500">
-              Restores realistic Nigerian customers (Lekki Barbers, Yaba Glow, SparkleWash Laundry) with visit histories and consent records.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm('Reset to default Nigerian demo records?')) {
-                  resetDemoData();
-                  refreshData();
-                  alert('Demo data restored');
-                }
-              }}
-              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center gap-1.5 transition"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-amber-500" />
-              <span>Reload Demo Records</span>
-            </button>
-          </div>
-
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-            <span className="font-semibold text-xs text-rose-800 block">Wipe Records for Active Business</span>
-            <p className="text-[11px] text-slate-500">
-              Clears all customers, visit ledger entries, and campaign drafts for &ldquo;{activeBusiness.name}&rdquo; so you start with 0 records.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm(`Delete all records for ${activeBusiness.name}?`)) {
-                  clearBusinessData(activeBusiness.id);
-                  refreshData();
-                  alert('Business records cleared. Ready for genuine entries!');
-                }
-              }}
-              className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-1.5 transition"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-              <span>Clear Sample Records</span>
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
