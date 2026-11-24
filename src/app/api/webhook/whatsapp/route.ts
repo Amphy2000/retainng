@@ -1480,9 +1480,43 @@ LANG: [ha | yo | ig | ar | en]`;
 }
 
 export async function GET() {
+  const geminiApiKey = process.env.GEMINI_API_KEY || '';
+  let geminiTestResult: Record<string, unknown> = {
+    has_key: Boolean(geminiApiKey),
+    key_prefix: geminiApiKey ? geminiApiKey.slice(0, 8) + '...' : 'none',
+  };
+
+  if (geminiApiKey) {
+    try {
+      const testRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: 'Reply with the word "PONG" and nothing else.' }] }],
+          }),
+        }
+      );
+      const text = await testRes.text();
+      geminiTestResult = {
+        ...geminiTestResult,
+        status: testRes.status,
+        statusText: testRes.statusText,
+        response_preview: text.slice(0, 300),
+      };
+    } catch (err: unknown) {
+      geminiTestResult = {
+        ...geminiTestResult,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
   return NextResponse.json({
     status: 'healthy',
     engine: 'RetainNG WhatsApp AI Concierge v2 (Gemini-powered)',
+    gemini_diagnostics: geminiTestResult,
     supported_gateways: ['Green-API', 'Twilio WhatsApp API', 'Meta Cloud API'],
   });
 }
