@@ -324,8 +324,12 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                   )}
                 </div>
 
-                <div className="text-[10px] text-slate-500 font-medium">
-                  Point phone camera here • No app download required
+                <div className="text-[10px] text-slate-500 font-medium space-y-1">
+                  <div>Point phone camera here • No app download required</div>
+                  <div className="pt-2 border-t border-slate-200 text-[9px] text-slate-400 font-semibold flex items-center justify-between">
+                    <span>⚡ Powered by <strong>RetainNG AI</strong></span>
+                    <span>Want this for your business? Call/WhatsApp: <strong>+234 916 915 3129</strong></span>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -388,9 +392,15 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                         </div>
                       </div>
 
-                      <div className="text-[8px] text-slate-500 border-t border-slate-200 pt-1 font-semibold flex items-center justify-between">
-                        <span>✓ Free Patient Care Service</span>
-                        <span>Keep with your medications</span>
+                      <div className="text-[8px] text-slate-500 border-t border-slate-200 pt-1 font-semibold space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span>✓ Free Patient Care Service</span>
+                          <span>Keep with your medications</span>
+                        </div>
+                        <div className="text-[7.5px] text-slate-400 font-medium flex items-center justify-between pt-0.5 border-t border-dashed border-slate-200">
+                          <span>⚡ Powered by <strong>RetainNG AI</strong></span>
+                          <span>Get for your store: <strong>+234 916 915 3129</strong></span>
+                        </div>
                       </div>
                     </div>
                   ))}

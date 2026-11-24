@@ -91,12 +91,20 @@ export function FounderLock({ children }: { children: React.ReactNode }) {
           </button>
         </form>
 
-        <div className="pt-2 border-t border-slate-800/80 text-[10px] text-slate-500 space-y-1">
+        <div className="pt-2 border-t border-slate-800/80 text-[10px] text-slate-500 space-y-2">
           <p className="flex items-center justify-center gap-1 text-slate-400">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             <span>Client portals &amp; QR bag slips remain 100% public</span>
           </p>
-          <p className="text-slate-600">Default Founder PIN: 202600</p>
+          <p className="text-slate-600 font-mono">Default Founder PIN: 202600</p>
+          <div className="pt-2 border-t border-slate-800/50">
+            <a
+              href="/onboard"
+              className="text-xs text-emerald-400 hover:text-emerald-300 font-bold inline-flex items-center gap-1 transition"
+            >
+              <span>Are you a pharmacy owner? Launch 14-Day Free Pilot →</span>
+            </a>
+          </div>
         </div>
       </div>
     </div>

@@ -16,7 +16,8 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     pathname?.startsWith('/opt-in') ||
     pathname?.startsWith('/kiosk') ||
     pathname?.startsWith('/portal') ||
-    pathname?.startsWith('/billing');
+    pathname?.startsWith('/billing') ||
+    pathname?.startsWith('/onboard');
 
   const {
     refreshData,
