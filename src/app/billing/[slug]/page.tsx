@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { getBusinessBySlug } from '@/lib/storage';
 import { Business } from '@/types';
 import { formatNgn } from '@/lib/utils';
+import { RetainNgLogo } from '@/components/RetainNgLogo';
 import {
   ShieldCheck,
   Check,
@@ -181,12 +182,12 @@ function BillingPortalInner() {
       <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-20 px-4 py-3.5">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white font-black text-sm flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              R
+            <div className="w-8 h-8 rounded-xl bg-slate-900 border border-emerald-500/30 overflow-hidden flex items-center justify-center shadow-md shadow-emerald-950/50">
+              <RetainNgLogo className="w-7 h-7" />
             </div>
             <div>
               <span className="font-black text-sm tracking-tight text-white block leading-none">
-                RetainNG Billing
+                Retain<span className="text-emerald-400">NG</span> Billing
               </span>
               <span className="text-[10px] text-slate-400 font-medium">Agency Retainer Subscription</span>
             </div>

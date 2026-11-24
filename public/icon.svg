@@ -1,0 +1,41 @@
+<svg viewBox="0 0 600 600" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="favBg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0f2e22" />
+      <stop offset="60%" stop-color="#06120e" />
+      <stop offset="100%" stop-color="#030707" />
+    </radialGradient>
+    <linearGradient id="favEmerald" x1="100" y1="120" x2="480" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34D399" />
+      <stop offset="50%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="favCyan" x1="220" y1="100" x2="500" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2DD4BF" />
+      <stop offset="50%" stop-color="#06B6D4" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+  </defs>
+  <circle cx="300" cy="300" r="280" fill="url(#favBg)" stroke="#10B981" stroke-width="12" stroke-opacity="0.6" />
+  <path
+    d="M 185 140 L 245 140 C 250 140 254 144 254 149 L 254 445 C 254 453 247 460 239 460 L 190 460 C 182 460 176 453 176 445 L 176 149 Z"
+    fill="url(#favEmerald)"
+  />
+  <path
+    d="M 235 140 L 345 140 C 410 140 455 178 455 242 C 455 305 408 344 340 344 L 235 344 Z"
+    fill="url(#favCyan)"
+  />
+  <path
+    d="M 254 200 L 335 200 C 368 200 392 216 392 242 C 392 268 368 284 335 284 L 254 284 Z"
+    fill="#040C08"
+    stroke="#34D399"
+    stroke-width="8"
+    stroke-opacity="0.7"
+  />
+  <path
+    d="M 310 325 L 380 325 C 395 325 408 333 416 345 L 472 436 C 479 448 471 460 457 460 L 398 460 C 388 460 378 454 372 444 L 326 372 C 320 363 313 358 300 358 L 254 358 L 254 325 Z"
+    fill="url(#favEmerald)"
+  />
+  <circle cx="445" cy="180" r="32" fill="#061A12" stroke="#34D399" stroke-width="8" />
+  <path d="M 445 165 L 445 195 M 430 180 L 460 180" stroke="#34D399" stroke-width="8" stroke-linecap="round" />
+</svg>

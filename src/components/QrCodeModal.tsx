@@ -155,8 +155,9 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto print:static print:bg-white print:p-0 print:overflow-visible">
+    <div id="print-modal-overlay" className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto print:static print:bg-white print:p-0 print:overflow-visible">
       <div
+        id="print-modal-container"
         className="bg-white w-full max-w-md max-h-[92vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col my-auto overflow-hidden animate-in zoom-in-95 duration-100 print:shadow-none print:border-none print:max-w-none print:w-full print:m-0 print:max-h-none print:overflow-visible"
         onClick={(e) => e.stopPropagation()}
       >
@@ -296,7 +297,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
 
             {/* The Actual Printable Canvas */}
             {printLayout === 'stand' ? (
-              <div className="border-4 border-slate-900 rounded-3xl p-5 bg-white shadow-lg space-y-2.5 print:border-black print:m-0 print:shadow-none">
+              <div className="a4-stand-card border-4 border-slate-900 rounded-3xl p-5 bg-white shadow-lg space-y-2.5 print:border-black print:shadow-none">
                 <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-black text-base flex items-center justify-center mx-auto">
                   ₦
                 </div>
@@ -338,34 +339,34 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                 <p className="text-[11px] text-slate-500 font-medium text-left print:hidden">
                   ✂️ <strong>Prescription Bag Slips:</strong> Print and cut into 4 slips. Staff simply drops one slip into the patient&apos;s medicine bag at checkout. Zero staff typing!
                 </p>
-                <div className="grid grid-cols-2 gap-3 p-1 rounded-2xl bg-white print:grid-cols-2 print:gap-4 print:p-0">
+                <div className="a4-printable-slips grid grid-cols-2 gap-3 p-1 rounded-2xl bg-white print:p-0">
                   {[1, 2, 3, 4].map((slip) => (
                     <div
                       key={slip}
-                      className="border-2 border-dashed border-slate-400 rounded-2xl p-4 bg-white space-y-2 text-center print:border-slate-800 print:p-5 flex flex-col justify-between"
+                      className="a4-slip-item border-2 border-dashed border-slate-400 rounded-2xl p-3 bg-white text-center flex flex-col justify-between"
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center justify-between text-[8px] text-slate-400 font-bold uppercase tracking-wider">
                           <span>✂ Cut Line</span>
                           <span>Prescription Companion</span>
                         </div>
-                        <div className="text-sm font-black uppercase tracking-tight text-slate-900 truncate">
+                        <div className="text-xs font-black uppercase tracking-tight text-slate-900 truncate">
                           {business.name}
                         </div>
-                        <div className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 inline-block">
+                        <div className="text-[9px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 inline-block">
                           {customBadge}
                         </div>
                       </div>
 
                       {business.business_type === 'pharmacy' || business.name.toLowerCase().includes('pharm') ? (
-                        <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-2 text-left space-y-1 text-[9px] text-slate-800">
+                        <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-lg p-1.5 text-left space-y-0.5 text-[8px] text-slate-800 my-0.5">
                           <div className="flex items-start gap-1 font-bold text-emerald-900">
                             <span className="text-emerald-600 font-black">🎙️</span>
                             <span>Voice Notes (Hausa, Yoruba, Igbo, English)</span>
                           </div>
                           <div className="flex items-start gap-1 font-bold text-emerald-900">
                             <span className="text-emerald-600 font-black">📸</span>
-                            <span>Snap Photo of Empty Pack or Prescription</span>
+                            <span>Snap Photo of Empty Pack or Rx</span>
                           </div>
                           <div className="flex items-start gap-1 font-bold text-emerald-900">
                             <span className="text-emerald-600 font-black">🚚</span>
@@ -373,33 +374,33 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                           </div>
                         </div>
                       ) : (
-                        <p className="text-[10px] text-slate-700 leading-tight font-medium px-1">
+                        <p className="text-[9px] text-slate-700 leading-tight font-medium px-1 my-0.5">
                           {customOfferText}
                         </p>
                       )}
 
-                      <div className="py-1">
+                      <div className="py-0.5">
                         {qrDataUrl && (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={qrDataUrl}
                             alt="Bag QR"
-                            className="w-24 h-24 mx-auto border border-slate-300 rounded-xl p-1 bg-white shadow-xs"
+                            className="w-18 h-18 sm:w-20 sm:h-20 mx-auto border border-slate-300 rounded-xl p-0.5 bg-white shadow-xs"
                           />
                         )}
-                        <div className="text-[9.5px] font-extrabold text-emerald-800 mt-1">
-                          📲 Scan with WhatsApp Camera (1 Tap &bull; Zero Typing)
+                        <div className="text-[8.5px] font-extrabold text-emerald-800 mt-0.5">
+                          📲 Scan with WhatsApp Camera
                         </div>
                       </div>
 
-                      <div className="text-[8px] text-slate-500 border-t border-slate-200 pt-1 font-semibold space-y-0.5">
+                      <div className="text-[7.5px] text-slate-500 border-t border-slate-200 pt-0.5 font-semibold space-y-0.5">
                         <div className="flex items-center justify-between">
                           <span>✓ Free Patient Care Service</span>
                           <span>Keep with your medications</span>
                         </div>
-                        <div className="text-[7.5px] text-slate-400 font-medium flex items-center justify-between pt-0.5 border-t border-dashed border-slate-200">
+                        <div className="text-[7px] text-slate-400 font-medium flex items-center justify-between pt-0.5 border-t border-dashed border-slate-200">
                           <span>⚡ Powered by <strong>RetainNG AI</strong></span>
-                          <span>Get for your store: <strong>+234 916 915 3129</strong></span>
+                          <span>WhatsApp: <strong>+234 916 915 3129</strong></span>
                         </div>
                       </div>
                     </div>

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { getBusinessBySlug, getCustomers, getSales, syncFleetFromCloud } from '@/lib/storage';
 import { Business, Customer, SaleOrVisit } from '@/types';
 import { QrCodeModal } from '@/components/QrCodeModal';
+import { RetainNgLogo } from '@/components/RetainNgLogo';
 import { formatNgn, formatRelativeTime } from '@/lib/utils';
 import {
   Printer,
@@ -179,7 +180,9 @@ function PortalInner() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="w-6 h-6 rounded-lg bg-slate-900 border border-emerald-500/30 overflow-hidden flex items-center justify-center">
+              <RetainNgLogo className="w-5 h-5" />
+            </div>
             <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
               Connected
             </span>

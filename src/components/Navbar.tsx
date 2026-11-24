@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getBusinesses, getActiveBusiness, setActiveBusiness } from '@/lib/storage';
 import { Business } from '@/types';
+import { RetainNgLogo } from './RetainNgLogo';
 import {
   LayoutDashboard,
   Users,
@@ -102,23 +103,7 @@ export function Navbar({ onOpenRecordModal, onOpenQrModal, onBusinessChanged }: 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 group shrink-0">
             <div className="w-8 h-8 rounded-xl bg-slate-900 border border-emerald-500/30 overflow-hidden flex items-center justify-center shadow-md shadow-emerald-950/50 group-hover:scale-105 transition">
-              <svg viewBox="0 0 600 600" className="w-7 h-7" fill="none">
-                <circle cx="300" cy="300" r="280" fill="#06140e" />
-                <path
-                  d="M 185 140 L 245 140 C 250 140 254 144 254 149 L 254 445 C 254 453 247 460 239 460 L 190 460 C 182 460 176 453 176 445 L 176 149 Z"
-                  fill="#10B981"
-                />
-                <path
-                  d="M 235 140 L 345 140 C 410 140 455 178 455 242 C 455 305 408 344 340 344 L 235 344 Z"
-                  fill="#06B6D4"
-                />
-                <path
-                  d="M 310 325 L 380 325 C 395 325 408 333 416 345 L 472 436 C 479 448 471 460 457 460 L 398 460 C 388 460 378 454 372 444 L 326 372 C 320 363 313 358 300 358 L 254 358 L 254 325 Z"
-                  fill="#10B981"
-                />
-                <circle cx="445" cy="180" r="26" fill="#061A12" stroke="#34D399" stroke-width="4" />
-                <path d="M 445 168 L 445 192 M 433 180 L 457 180" stroke="#34D399" stroke-width="5" stroke-linecap="round" />
-              </svg>
+              <RetainNgLogo className="w-7 h-7" />
             </div>
             <div className="leading-none">
               <div className="font-extrabold text-sm tracking-tight text-white">

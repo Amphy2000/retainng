@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createBusiness } from '@/lib/storage';
 import { BusinessType } from '@/types';
+import { RetainNgLogo } from '@/components/RetainNgLogo';
 import {
   Sparkles,
   Bot,
@@ -106,11 +107,9 @@ export default function SelfOnboardingPage() {
       {/* Top Header */}
       <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-cyan-400 p-0.5 shadow-lg shadow-emerald-500/20">
-              <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                <Bot className="w-5 h-5 text-emerald-400" />
-              </div>
+          <Link href="/onboard" className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 border border-emerald-500/30 overflow-hidden flex items-center justify-center shadow-md shadow-emerald-950/50">
+              <RetainNgLogo className="w-7 h-7" />
             </div>
             <div>
               <div className="font-extrabold text-base tracking-tight text-white flex items-center gap-1">
@@ -124,23 +123,14 @@ export default function SelfOnboardingPage() {
           </Link>
 
           <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-block text-xs text-slate-400">
-              Need assistance? WhatsApp:{' '}
-              <a
-                href="https://wa.me/2349169153129"
-                target="_blank"
-                rel="noreferrer"
-                className="text-emerald-400 font-bold hover:underline"
-              >
-                +234 916 915 3129
-              </a>
-            </span>
-            <Link
-              href="/"
-              className="text-xs font-semibold text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-900 transition"
+            <a
+              href="https://wa.me/2349169153129?text=Hello%20RetainNG!%20I%20want%20to%20onboard%20my%20pharmacy."
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold transition"
             >
-              Founder Login
-            </Link>
+              <span>💬 WhatsApp Partner Support</span>
+            </a>
           </div>
         </div>
       </header>

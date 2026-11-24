@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Lock, ShieldCheck, ArrowRight, KeyRound } from 'lucide-react';
+import { RetainNgLogo } from './RetainNgLogo';
 
 const DEFAULT_PIN = '202600';
 const STORAGE_KEY = 'retainng_founder_unlocked';
@@ -45,8 +46,8 @@ export function FounderLock({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 selection:bg-emerald-500 selection:text-white">
       <div className="max-w-sm w-full bg-slate-900 border border-slate-800 rounded-3xl p-7 text-center space-y-6 shadow-2xl shadow-emerald-500/10">
-        <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center mx-auto shadow-inner">
-          <KeyRound className="w-8 h-8 text-emerald-400" />
+        <div className="w-14 h-14 rounded-2xl bg-slate-950 border border-emerald-500/30 overflow-hidden flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/60">
+          <RetainNgLogo className="w-11 h-11" />
         </div>
 
         <div className="space-y-1.5">

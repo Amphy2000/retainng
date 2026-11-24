@@ -46,7 +46,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
           onBusinessChanged={refreshData}
         />
 
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-5 pb-24 lg:pb-10">
+        <main id="app-shell-main" className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-5 pb-24 lg:pb-10 print:hidden">
           {children}
         </main>
 
