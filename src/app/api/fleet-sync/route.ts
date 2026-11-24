@@ -98,6 +98,78 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, business: res.data });
     }
 
+    if (action === 'register_opt_in') {
+      const { business_id, full_name, phone, email, tags, notes, category, visit_date } = payload;
+
+      const custRes = await supabaseAdmin
+        .from('customers')
+        .upsert(
+          {
+            business_id,
+            full_name,
+            phone,
+            email: email || null,
+            tags: tags || ['Bag Slip Scan'],
+            notes: notes || `Registered via Counter QR. Care: ${category || 'General'}`,
+            consent_status: 'consented',
+            consent_source: 'qr_optin',
+            total_visits: 1,
+            last_visit_date: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'business_id,phone' }
+        )
+        .select()
+        .single();
+
+      let saleRes;
+      if (custRes.data) {
+        saleRes = await supabaseAdmin
+          .from('sales_or_visits')
+          .insert({
+            business_id,
+            customer_id: custRes.data.id,
+            customer_name: full_name,
+            customer_phone: phone,
+            service_or_product: category || 'Bag Slip QR Registration',
+            amount_ngn: 0,
+            visit_date: visit_date || new Date().toISOString().split('T')[0],
+            is_manual_entry: false,
+          })
+          .select()
+          .single();
+      }
+
+      return NextResponse.json({
+        success: true,
+        customer: custRes.data,
+        sale: saleRes?.data,
+      });
+    }
+
+    if (action === 'create_sale') {
+      const { data, error } = await supabaseAdmin
+        .from('sales_or_visits')
+        .insert({
+          business_id: payload.business_id,
+          customer_id: payload.customer_id,
+          customer_name: payload.customer_name,
+          customer_phone: payload.customer_phone,
+          service_or_product: payload.service_or_product,
+          amount_ngn: payload.amount_ngn || 0,
+          visit_date: payload.visit_date || new Date().toISOString().split('T')[0],
+          is_manual_entry: payload.is_manual_entry ?? true,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ success: true, sale: data });
+    }
+
     if (action === 'create_customer') {
       const { data, error } = await supabaseAdmin
         .from('customers')

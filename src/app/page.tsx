@@ -79,6 +79,7 @@ export default function AgencyRadarPage() {
       return {
         totalBusinesses: 0,
         totalPatients: 0,
+        todayOnboarded: 0,
         totalRefills: 0,
         totalProtectedRevenue: 0,
         recentActivity: [],
@@ -90,6 +91,7 @@ export default function AgencyRadarPage() {
       : allBusinesses.filter((b) => b.id === selectedBiz);
 
     let totalPatients = 0;
+    let todayOnboarded = 0;
     let totalRefills = 0;
     let totalProtectedRevenue = 0;
     const recentActivity: Array<{
@@ -99,12 +101,40 @@ export default function AgencyRadarPage() {
       service: string;
       businessName: string;
       date: string;
+      badgeText: string;
+      badgeColor: 'emerald' | 'blue';
     }> = [];
 
     stores.forEach((biz) => {
       const custs = getCustomers(biz.id);
       const sales = getSales(biz.id);
-      totalPatients += custs.length;
+
+      custs.forEach((c) => {
+        totalPatients++;
+        const cDate = c.created_at || c.consent_date;
+        if (cDate && new Date(cDate).toDateString() === new Date().toDateString()) {
+          todayOnboarded++;
+        }
+
+        // Add to live activity if not already present in sales
+        const hasMatchingSale = sales.some(
+          (s) =>
+            s.customer_id === c.id ||
+            (s.customer_phone && c.phone && s.customer_phone.replace(/[\s+-]/g, '') === c.phone.replace(/[\s+-]/g, ''))
+        );
+        if (!hasMatchingSale) {
+          recentActivity.push({
+            id: `onboard_${c.id}`,
+            customerName: c.full_name || 'Customer',
+            phone: c.phone || '',
+            service: c.tags?.[0] ? `${c.tags[0]} Onboarding` : 'Bag Slip QR Onboarding',
+            businessName: biz.name,
+            date: c.created_at || c.consent_date || new Date().toISOString(),
+            badgeText: 'New Client',
+            badgeColor: 'blue',
+          });
+        }
+      });
 
       sales.forEach((s) => {
         totalRefills++;
@@ -117,9 +147,11 @@ export default function AgencyRadarPage() {
           id: s.id,
           customerName: s.customer_name || 'Customer',
           phone: s.customer_phone || '',
-          service: s.service_or_product || 'Prescription Refill',
+          service: s.service_or_product || (biz.business_type === 'pharmacy' ? 'Prescription Refill' : 'Service Check-in'),
           businessName: biz.name,
-          date: s.created_at,
+          date: s.created_at || s.visit_date,
+          badgeText: s.amount_ngn > 0 ? 'Fulfilled' : 'Check-in',
+          badgeColor: 'emerald',
         });
       });
     });
@@ -127,6 +159,7 @@ export default function AgencyRadarPage() {
     return {
       totalBusinesses: allBusinesses.length,
       totalPatients,
+      todayOnboarded,
       totalRefills,
       totalProtectedRevenue,
       recentActivity: recentActivity.sort(
@@ -361,6 +394,25 @@ export default function AgencyRadarPage() {
             <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Clients Onboarded
+                </span>
+                <Users className="w-4 h-4 text-emerald-600" />
+              </div>
+              <p className="text-3xl font-black text-slate-900 leading-none">
+                {data.totalPatients}
+              </p>
+              <p className="text-xs text-slate-500 pt-1">
+                {data.todayOnboarded > 0 ? (
+                  <span className="text-emerald-600 font-bold">+{data.todayOnboarded} joined today</span>
+                ) : (
+                  <span>All-time client network</span>
+                )}
+              </p>
+            </div>
+
+            <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   Repeat Orders Handled
                 </span>
                 <Bot className="w-4 h-4 text-emerald-600" />
@@ -385,21 +437,6 @@ export default function AgencyRadarPage() {
               </p>
               <p className="text-xs text-slate-500 pt-1">
                 Repeat sales saved from competitors
-              </p>
-            </div>
-
-            <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Staff Labor Required
-                </span>
-                <Clock className="w-4 h-4 text-amber-500" />
-              </div>
-              <p className="text-3xl font-black text-slate-900 leading-none">
-                0 hrs
-              </p>
-              <p className="text-xs text-slate-500 pt-1">
-                100% QR Touchpoints + WhatsApp Autopilot
               </p>
             </div>
           </div>
@@ -438,8 +475,14 @@ export default function AgencyRadarPage() {
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full block">
-                          Fulfilled
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full block ${
+                            act.badgeColor === 'blue'
+                              ? 'text-blue-700 bg-blue-100/80 border border-blue-200'
+                              : 'text-emerald-700 bg-emerald-100/70 border border-emerald-200'
+                          }`}
+                        >
+                          {act.badgeText}
                         </span>
                         <span className="text-[10px] text-slate-400 mt-0.5 block">
                           {formatRelativeTime(act.date)}

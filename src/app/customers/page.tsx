@@ -366,10 +366,10 @@ export default function CustomersPage() {
                   <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                     <div className="text-left sm:text-right">
                       <p className="text-xs font-bold text-slate-900">
-                        {cust.total_visits || 0} visits • {formatNgn(cust.total_spent_ngn)}
+                        {Math.max(1, cust.total_visits || 0)} visit{(cust.total_visits || 1) !== 1 ? 's' : ''} • {formatNgn(cust.total_spent_ngn)}
                       </p>
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        Last: {formatRelativeTime(cust.last_visit_date)}
+                        Last: {cust.last_visit_date ? formatRelativeTime(cust.last_visit_date) : (cust.created_at ? formatRelativeTime(cust.created_at) : 'Today')}
                       </p>
                     </div>
 

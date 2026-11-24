@@ -60,6 +60,11 @@ function PortalInner() {
   const stats = useMemo(() => {
     const totalCusts = customers.length;
     const now = new Date();
+    const todayCusts = customers.filter(c => {
+      const cDate = c.created_at || c.consent_date;
+      return cDate && new Date(cDate).toDateString() === now.toDateString();
+    }).length;
+
     const activeCusts = customers.filter(c => {
       if (!c.last_visit_date) return false;
       const diff = Math.floor((now.getTime() - new Date(c.last_visit_date).getTime()) / 86400000);
@@ -70,10 +75,50 @@ function PortalInner() {
     const avgTicket = business?.business_type === 'pharmacy' ? 12000 : business?.business_type === 'barber' ? 6000 : 8000;
     const estimatedValue = recoveredCount * avgTicket;
 
-    return { totalCusts, activeCusts, recoveredCount, estimatedValue };
+    return { totalCusts, todayCusts, activeCusts, recoveredCount, estimatedValue };
   }, [customers, business]);
 
-  const recentVisits = sales.slice(0, 6);
+  const recentVisits = useMemo(() => {
+    const list: Array<{
+      id: string;
+      customer_name: string;
+      service_or_product: string;
+      created_at: string;
+      badgeText: string;
+      badgeColor: 'emerald' | 'blue';
+    }> = [];
+
+    sales.forEach((s) => {
+      list.push({
+        id: s.id,
+        customer_name: s.customer_name || 'Customer',
+        service_or_product: s.service_or_product || (business?.business_type === 'pharmacy' ? 'Prescription Refill' : 'Service Check-in'),
+        created_at: s.created_at || s.visit_date,
+        badgeText: s.amount_ngn > 0 ? 'Fulfilled' : 'Check-in',
+        badgeColor: 'emerald',
+      });
+    });
+
+    customers.forEach((c) => {
+      const hasSale = sales.some(
+        (s) =>
+          s.customer_id === c.id ||
+          (s.customer_phone && c.phone && s.customer_phone.replace(/[\s+-]/g, '') === c.phone.replace(/[\s+-]/g, ''))
+      );
+      if (!hasSale) {
+        list.push({
+          id: `onboard_${c.id}`,
+          customer_name: c.full_name || 'Customer',
+          service_or_product: c.tags?.[0] ? `${c.tags[0]} Onboarding` : 'Bag Slip QR Registration',
+          created_at: c.created_at || c.consent_date || new Date().toISOString(),
+          badgeText: 'New Client',
+          badgeColor: 'blue',
+        });
+      }
+    });
+
+    return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 10);
+  }, [sales, customers, business]);
 
   if (loading) {
     return (
@@ -197,9 +242,15 @@ function PortalInner() {
             </div>
 
             <div className="bg-sky-50 border border-sky-100 rounded-2xl p-3">
-              <div className="text-xl sm:text-2xl font-black text-sky-700">0 hrs</div>
-              <div className="text-[11px] font-bold text-sky-900 mt-0.5">Your Marketing Time</div>
-              <div className="text-[10px] text-sky-600">100% agency handled</div>
+              <div className="text-xl sm:text-2xl font-black text-sky-700">
+                {stats.todayCusts > 0 ? `+${stats.todayCusts}` : stats.totalCusts}
+              </div>
+              <div className="text-[11px] font-bold text-sky-900 mt-0.5">
+                {stats.todayCusts > 0 ? 'Joined Today' : 'Total Client Base'}
+              </div>
+              <div className="text-[10px] text-sky-600">
+                {stats.todayCusts > 0 ? 'via Bag Slip QR' : '100% Bag Slip QR'}
+              </div>
             </div>
           </div>
         </div>
@@ -228,8 +279,17 @@ function PortalInner() {
                       <div className="text-[10px] text-slate-500">{v.service_or_product || 'Regular Refill'}</div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-400 font-medium">
+                  <div className="text-right shrink-0">
+                    <span
+                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full block ${
+                        v.badgeColor === 'blue'
+                          ? 'text-blue-700 bg-blue-100 border border-blue-200'
+                          : 'text-emerald-700 bg-emerald-100 border border-emerald-200'
+                      }`}
+                    >
+                      {v.badgeText}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium mt-0.5 block">
                       {formatRelativeTime(v.created_at)}
                     </span>
                   </div>

@@ -274,16 +274,26 @@ export function getCustomers(businessId: string): Customer[] {
 
   // Compute stats per customer
   return bizCustomers.map((cust) => {
+    const custCleanPhone = cust.phone ? cust.phone.replace(/[\s+-]/g, '') : '';
     const custSales = bizSales
-      .filter((s) => s.customer_id === cust.id)
+      .filter((s) => {
+        if (s.customer_id && s.customer_id === cust.id) return true;
+        if (custCleanPhone && s.customer_phone) {
+          const sCleanPhone = s.customer_phone.replace(/[\s+-]/g, '');
+          if (sCleanPhone.includes(custCleanPhone) || custCleanPhone.includes(sCleanPhone)) return true;
+        }
+        return false;
+      })
       .sort((a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime());
 
     const totalSpent = custSales.reduce((acc, s) => acc + (Number(s.amount_ngn) || 0), 0);
-    const lastVisit = custSales.length > 0 ? custSales[0].visit_date : undefined;
+    const lastVisit = custSales.length > 0 ? custSales[0].visit_date : (cust.last_visit_date || cust.created_at);
+    // Every registered customer has at least 1 visit (their registration/touchpoint visit)
+    const totalVisits = Math.max(1, cust.total_visits || 0, custSales.length);
 
     return {
       ...cust,
-      total_visits: custSales.length,
+      total_visits: totalVisits,
       total_spent_ngn: totalSpent,
       last_visit_date: lastVisit,
     };
@@ -493,6 +503,16 @@ export function recordSale(
 
   allSales.unshift(newSale);
   setStored(STORAGE_KEYS.SALES, allSales);
+
+  // Sync to Cloud Supabase
+  if (typeof window !== 'undefined') {
+    fetch('/api/fleet-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'create_sale', payload: newSale }),
+    }).catch((e) => console.warn('Cloud sync error on recordSale:', e));
+    window.dispatchEvent(new CustomEvent('retainng_fleet_synced'));
+  }
 
   // Auto-tag customer with the service/visit type if provided
   if (customerId && params.service_or_product) {
@@ -1016,6 +1036,29 @@ export function registerCustomerOptIn(
   setStored(STORAGE_KEYS.CUSTOMERS, allCustomers);
   setStored(STORAGE_KEYS.CONSENT_RECORDS, allConsents);
   setStored(STORAGE_KEYS.SALES, allSales);
+
+  // Sync customer and initial visit to Cloud Supabase
+  if (typeof window !== 'undefined') {
+    fetch('/api/fleet-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'register_opt_in',
+        payload: {
+          business_id: business.id,
+          customer_id: custId,
+          full_name: cleanName,
+          phone: cleanPhone,
+          email: data.email?.trim() || undefined,
+          tags: allCustomers.find((c) => c.id === custId)?.tags || ['Bag Slip Scan'],
+          category: categorySummary || 'Bag Slip QR Registration',
+          visit_date: now.split('T')[0],
+        },
+      }),
+    }).catch((e) => console.warn('Cloud sync error on registerCustomerOptIn:', e));
+
+    window.dispatchEvent(new CustomEvent('retainng_fleet_synced'));
+  }
 
   return { success: true, message: `Thank you, ${cleanName}! You're registered with ${business.name}.`, customerId: custId };
 }
