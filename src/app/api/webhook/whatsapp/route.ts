@@ -375,12 +375,15 @@ function detectIntentKeywords(msg: string): string {
   return `Hello! 👋 We are here to help with medication refills, delivery, and health queries in your preferred language or dialect. How can we assist you today?\nLANG: en`;
 }
 
-async function handleManagerDispatch(
+async function handleManagerOrderAction(
   managerPhone: string,
   messageText: string,
   host: string
 ): Promise<{ success: boolean; message: string }> {
-  const match = messageText.match(/dispatch\s*([0-9+]+)?/i);
+  const isReady = messageText.trim().toUpperCase().startsWith('READY');
+  const actionType = isReady ? 'ready' : 'dispatch';
+
+  const match = messageText.match(/(?:dispatch|ready)\s*([0-9+]+)?/i);
   const targetDigits = match?.[1] ? match[1].replace(/[^0-9]/g, '') : '';
 
   if (!supabaseAdmin) {
@@ -432,7 +435,7 @@ async function handleManagerDispatch(
   if (!customer || !customer.phone) {
     return {
       success: false,
-      message: 'Could not find a pending order to dispatch. Please reply with "DISPATCH [last 4 digits]" e.g. DISPATCH 3129',
+      message: `Could not find a pending order. Please reply with "${isReady ? 'READY' : 'DISPATCH'} [last 4 digits]" e.g. ${isReady ? 'READY 3129' : 'DISPATCH 3129'}`,
     };
   }
 
@@ -455,54 +458,75 @@ async function handleManagerDispatch(
   const isIgbo = tags.includes('Lang:Igbo');
   const prefersVoice = tags.includes('Prefers-Voice') || isHausa || isYoruba || isIgbo;
 
-  let dispatchMsg = '';
+  let notifyMsg = '';
   let langCode = 'en';
 
-  if (isHausa) {
-    langCode = 'ha';
-    dispatchMsg = `🛵 *Labari mai kyau ${custName}!* Maganinku daga *${bizName}* an gama hadawa kuma mai kawo kaya (dispatch rider) yana kan hanya! Zai iso gare ku nan da minti 30-45. 💊 Muna fatan samun sauƙi cikin gaggawa!`;
-  } else if (isYoruba) {
-    langCode = 'yo';
-    dispatchMsg = `🛵 *Iroyin ayo ${custName}!* Oogun yin lati *${bizName}* ti wa ni imurasile, akowe dispatch si wa lori ona lati gbe e wa! E reti re laarin iseju 30-45. 💊 E seun pupo!`;
-  } else if (isIgbo) {
-    langCode = 'ig';
-    dispatchMsg = `🛵 *Ozi ọma ${custName}!* Ọgwụ gị si na *${bizName}* adịla njikere, onye dispatch nọ na ụzọ na-eweta ya! Ọ ga-eru n'ime nkeji 30-45. 💊 Daalụ nke ukwuu!`;
+  if (isReady) {
+    // Counter pickup notification
+    if (isHausa) {
+      langCode = 'ha';
+      notifyMsg = `🛍️ *Sannu ${custName}!* Maganinku daga *${bizName}* an riga an hada shi yana jiran ku a kanta! Kuna iya shigowa ku karba a kowane lokaci da kuka shirya. 💊 Sai mun gan ku!`;
+    } else if (isYoruba) {
+      langCode = 'yo';
+      notifyMsg = `🛍️ *E ku ojumo ${custName}!* Oogun yin lati *${bizName}* ti wa ni imurasile lori kanta wa! E le wa gba a nigbakugba ti e ba fe loni. 💊 A n reti yin!`;
+    } else if (isIgbo) {
+      langCode = 'ig';
+      notifyMsg = `🛍️ *Nnọọ ${custName}!* Ọgwụ gị si na *${bizName}* adịla njikere na tebụl anyị! Ị nwere ike ịbịa were ya n'oge ọ bụla taa. 💊 Anyị na-eche gị!`;
+    } else {
+      langCode = 'en';
+      notifyMsg = `🛍️ *Hello ${custName}!* Your order from *${bizName}* has been packaged and is waiting for you at the counter! Feel free to walk in and pick it up anytime today. 💊 See you soon!`;
+    }
   } else {
-    langCode = 'en';
-    dispatchMsg = `🛵 *Good news ${custName}!* Your order from *${bizName}* has been packaged and our dispatch rider is heading your way! Expect delivery in 30-45 minutes. 💊 Thank you for choosing ${bizName}!`;
+    // Delivery rider on the way notification
+    if (isHausa) {
+      langCode = 'ha';
+      notifyMsg = `🛵 *Labari mai kyau ${custName}!* Maganinku daga *${bizName}* an gama hadawa kuma mai kawo kaya (dispatch rider) yana kan hanya! Zai iso gare ku nan da minti 30-45. 💊 Muna fatan samun sauƙi cikin gaggawa!`;
+    } else if (isYoruba) {
+      langCode = 'yo';
+      notifyMsg = `🛵 *Iroyin ayo ${custName}!* Oogun yin lati *${bizName}* ti wa ni imurasile, akowe dispatch si wa lori ona lati gbe e wa! E reti re laarin iseju 30-45. 💊 E seun pupo!`;
+    } else if (isIgbo) {
+      langCode = 'ig';
+      notifyMsg = `🛵 *Ozi ọma ${custName}!* Ọgwụ gị si na *${bizName}* adịla njikere, onye dispatch nọ na ụzọ na-eweta ya! Ọ ga-eru n'ime nkeji 30-45. 💊 Daalụ nke ukwuu!`;
+    } else {
+      langCode = 'en';
+      notifyMsg = `🛵 *Good news ${custName}!* Your order from *${bizName}* has been packaged and our dispatch rider is heading your way! Expect delivery in 30-45 minutes. 💊 Thank you for choosing ${bizName}!`;
+    }
   }
 
   // Send WhatsApp message to patient
-  await sendWhatsApp(custCleanPhone, dispatchMsg);
+  await sendWhatsApp(custCleanPhone, notifyMsg);
 
   // Send voice note in their native tongue
   if (prefersVoice) {
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const voiceUrl = `${protocol}://${host}/api/tts?tl=${langCode}&text=${encodeURIComponent(
-      dispatchMsg.replace(/[*🛵💊]/g, '')
+      notifyMsg.replace(/[*🛵🛍️💊]/g, '')
     )}`;
     await sendWhatsAppVoice(custCleanPhone, voiceUrl);
   }
 
-  // Log dispatch in sales_or_visits
+  // Log action in sales_or_visits
   try {
     await supabaseAdmin.from('sales_or_visits').insert({
       business_id: customer.business_id,
       customer_id: customer.id,
       customer_name: custName,
       customer_phone: customer.phone,
-      service_or_product: 'Order Dispatched (Rider En Route)',
+      service_or_product: isReady ? 'Order Ready for Counter Pickup' : 'Order Dispatched (Rider En Route)',
       amount_ngn: 0,
-      notes: `Dispatched by manager from WhatsApp. Patient notified via ${isHausa ? 'Hausa' : isYoruba ? 'Yoruba' : isIgbo ? 'Igbo' : 'English'} WhatsApp + Voice.`,
+      notes: `${isReady ? 'Counter pickup alert' : 'Dispatch rider alert'} sent by manager from WhatsApp. Patient notified via ${isHausa ? 'Hausa' : isYoruba ? 'Yoruba' : isIgbo ? 'Igbo' : 'English'} text + Voice.`,
       is_manual_entry: false,
     });
   } catch (e) {
-    console.warn('Dispatch log error:', e);
+    console.warn('Action log error:', e);
   }
+
+  const successLabel = isReady ? 'COUNTER PICKUP READY' : 'DISPATCH CONFIRMED';
+  const actionSummary = isReady ? 'Ready for pickup at counter' : 'Rider is en route';
 
   return {
     success: true,
-    message: `✅ *DISPATCH CONFIRMED — ${bizName}*\n\nPatient *${custName}* (+${custCleanPhone}) has been notified via WhatsApp${prefersVoice ? ' and Voice Note' : ''}.\n\n🛵 Dispatch rider is en route!`,
+    message: `✅ *${successLabel} — ${bizName}*\n\nPatient *${custName}* (+${custCleanPhone}) has been notified via WhatsApp${prefersVoice ? ' and Voice Note' : ''}.\n\n${isReady ? '🛍️' : '🛵'} ${actionSummary}!`,
   };
 }
 
@@ -631,14 +655,15 @@ export async function POST(req: NextRequest) {
       messageBody = '[Photo of medication blister pack or doctor prescription]';
     }
 
-    // --- 0. CHECK FOR 1-TAP MANAGER DISPATCH COMMAND ---
-    if (messageBody.trim().toUpperCase().startsWith('DISPATCH')) {
-      const dispatchRes = await handleManagerDispatch(cleanPhone, messageBody.trim(), host);
-      await sendWhatsApp(cleanPhone, dispatchRes.message);
+    // --- 0. CHECK FOR 1-TAP MANAGER DISPATCH OR READY COMMAND ---
+    const upperMsg = messageBody.trim().toUpperCase();
+    if (upperMsg.startsWith('DISPATCH') || upperMsg.startsWith('READY')) {
+      const actionRes = await handleManagerOrderAction(cleanPhone, messageBody.trim(), host);
+      await sendWhatsApp(cleanPhone, actionRes.message);
       return NextResponse.json({
-        success: dispatchRes.success,
-        intent: 'manager_dispatch',
-        message: dispatchRes.message,
+        success: actionRes.success,
+        intent: upperMsg.startsWith('READY') ? 'manager_ready' : 'manager_dispatch',
+        message: actionRes.message,
       });
     }
 
@@ -877,8 +902,11 @@ LANG: [ha | yo | ig | ar | en]`;
           `👤 *Patient:* ${displayName}\n` +
           `📱 *Phone:* +${cleanPhone}\n` +
           `💊 *Medication:* ${detectedMed || messageBody}\n\n` +
-          `👉 *To alert patient when rider leaves:* Reply *DISPATCH ${cleanPhone.slice(-4)}* (bot will notify them in their dialect).\n` +
-          `📞 Or tap their phone number above to call them directly.`;
+          `━━━━━━━━━━━━━━━━━━━━━\n` +
+          `⚡ *1-TAP REPLIES:*\n` +
+          `• *For Counter Pickup:* Reply 👉 *READY ${cleanPhone.slice(-4)}*\n` +
+          `• *For Home Delivery:* Reply 👉 *DISPATCH ${cleanPhone.slice(-4)}*\n` +
+          `📞 Or tap phone number above to call patient directly.`;
 
         await sendWhatsApp(managerPhone, managerAlert);
       }
