@@ -109,8 +109,18 @@ function SettingsContent() {
       setConciergePhone(activeBusiness.concierge_phone || '+234 703 267 3310');
 
       setMonthlyRetainer(activeBusiness.monthly_retainer_ngn ?? 25000);
-      setSubscriptionStatus(activeBusiness.subscription_status ?? 'active');
-      setRenewalDate(activeBusiness.subscription_renewal_date || '');
+      const rawStatus = activeBusiness.subscription_status as unknown as string;
+      const normalizedStatus = (rawStatus === '14-Day Free Pilot' || rawStatus === 'trial') ? 'trial' : (rawStatus || 'trial');
+      setSubscriptionStatus(normalizedStatus as SubscriptionStatus);
+
+      let initialRenewal = activeBusiness.subscription_renewal_date || '';
+      if (!initialRenewal && normalizedStatus === 'trial') {
+        const baseDate = activeBusiness.created_at ? new Date(activeBusiness.created_at) : new Date();
+        const expiry = new Date(baseDate);
+        expiry.setDate(expiry.getDate() + 14);
+        initialRenewal = expiry.toISOString().split('T')[0];
+      }
+      setRenewalDate(initialRenewal);
     }, 0);
     return () => clearTimeout(timer);
   }, [activeBusiness]);
@@ -164,6 +174,11 @@ function SettingsContent() {
     e.preventDefault();
     if (!newBizName.trim()) return;
 
+    const now = new Date();
+    const trialExpiry = new Date(now);
+    trialExpiry.setDate(trialExpiry.getDate() + 14);
+    const formattedRenewal = trialExpiry.toISOString().split('T')[0];
+
     const created = createBusiness({
       name: newBizName.trim(),
       business_type: newBizType,
@@ -171,6 +186,9 @@ function SettingsContent() {
       state: 'Kaduna',
       currency: 'NGN',
       timezone: 'Africa/Lagos',
+      monthly_retainer_ngn: 25000,
+      subscription_status: 'trial',
+      subscription_renewal_date: formattedRenewal,
     });
 
     setIsCreatingNew(false);

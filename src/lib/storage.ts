@@ -2,6 +2,7 @@
 
 import {
   Business,
+  SubscriptionStatus,
   Customer,
   CustomerConsentRecord,
   SaleOrVisit,
@@ -140,7 +141,19 @@ export function createBusiness(data: Omit<Business, 'id' | 'created_at' | 'opt_i
       ? crypto.randomUUID()
       : 'a' + Math.random().toString(36).substring(2, 10) + '-0000-0000-0000-' + Date.now().toString(16).padStart(12, '0');
 
+  // Default 14-day trial expiration date
+  const now = new Date();
+  const trialExpiry = new Date(now);
+  trialExpiry.setDate(trialExpiry.getDate() + 14);
+  const defaultRenewal = trialExpiry.toISOString().split('T')[0];
+
+  const rawStatus = data.subscription_status as unknown as string;
+  const normalizedStatus: SubscriptionStatus = (rawStatus === '14-Day Free Pilot' || rawStatus === 'trial') ? 'trial' : ((rawStatus as SubscriptionStatus) || 'trial');
+
   const newBiz: Business = {
+    monthly_retainer_ngn: data.monthly_retainer_ngn || 25000,
+    subscription_status: normalizedStatus,
+    subscription_renewal_date: data.subscription_renewal_date || defaultRenewal,
     ...data,
     id: newId,
     currency: 'NGN',

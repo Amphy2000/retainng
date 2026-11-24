@@ -35,6 +35,14 @@ export async function POST(req: NextRequest) {
     const { action, payload } = body;
 
     if (action === 'create_business') {
+      const now = new Date();
+      const trialExpiry = new Date(now);
+      trialExpiry.setDate(trialExpiry.getDate() + 14);
+      const defaultRenewal = trialExpiry.toISOString().split('T')[0];
+
+      const rawStatus = payload.subscription_status;
+      const normalizedStatus = (rawStatus === '14-Day Free Pilot' || rawStatus === 'trial') ? 'trial' : (rawStatus || 'trial');
+
       const { data, error } = await supabaseAdmin
         .from('businesses')
         .insert({
@@ -52,6 +60,9 @@ export async function POST(req: NextRequest) {
           is_demo: false,
           manager_alert_phone: payload.manager_alert_phone || payload.phone || '2349169153129',
           concierge_phone: payload.concierge_phone || '+234 703 267 3310',
+          monthly_retainer_ngn: payload.monthly_retainer_ngn || 25000,
+          subscription_status: normalizedStatus,
+          subscription_renewal_date: payload.subscription_renewal_date || defaultRenewal,
         })
         .select()
         .single();
@@ -66,10 +77,15 @@ export async function POST(req: NextRequest) {
 
     if (action === 'update_business') {
       const { id, updates } = payload;
+      const sanitizedUpdates = { ...updates };
+      if (sanitizedUpdates.subscription_status === '14-Day Free Pilot') {
+        sanitizedUpdates.subscription_status = 'trial';
+      }
+
       let res = await supabaseAdmin
         .from('businesses')
         .update({
-          ...updates,
+          ...sanitizedUpdates,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)

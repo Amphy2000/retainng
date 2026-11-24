@@ -624,7 +624,18 @@ async function handleMerchantSelfOnboard(
         slug = existing.opt_in_slug;
         isExisting = true;
       } else {
-        // Create new business record
+        // Calculate 14-day free trial expiration date
+        const now = new Date();
+        const trialExpiry = new Date(now);
+        trialExpiry.setDate(trialExpiry.getDate() + 14);
+        const formattedRenewal = trialExpiry.toISOString().split('T')[0];
+        const expiryFormattedReadable = trialExpiry.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+
+        // Create new business record with 14-day trial
         const insertPayload = {
           id: storeId,
           name: formattedName,
@@ -639,7 +650,8 @@ async function handleMerchantSelfOnboard(
           timezone: 'Africa/Lagos',
           opt_in_slug: slug,
           is_demo: false,
-          subscription_status: '14-Day Free Pilot',
+          subscription_status: 'trial',
+          subscription_renewal_date: formattedRenewal,
           monthly_retainer_ngn: 25000,
         };
 
@@ -663,6 +675,9 @@ async function handleMerchantSelfOnboard(
             timezone: 'Africa/Lagos',
             opt_in_slug: slug,
             is_demo: false,
+            subscription_status: 'trial',
+            subscription_renewal_date: formattedRenewal,
+            monthly_retainer_ngn: 25000,
           };
           await supabaseAdmin.from('businesses').insert(fallbackPayload);
         }
@@ -696,18 +711,30 @@ async function handleMerchantSelfOnboard(
     ? `✅ *WELCOME BACK — ${formattedName.toUpperCase()}!*`
     : `🎉 *CONGRATULATIONS! ${formattedName.toUpperCase()} IS NOW LIVE ON RETAINNG!* 💊`;
 
+  const now = new Date();
+  const trialExpiry = new Date(now);
+  trialExpiry.setDate(trialExpiry.getDate() + 14);
+  const expiryFormattedReadable = trialExpiry.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
   return {
     success: true,
     message:
       `${greetingTitle}\n\n` +
-      `Your store's WhatsApp AI customer retention autopilot is active.\n\n` +
+      `Your store's WhatsApp AI customer retention autopilot is active on your *14-Day Free Partner Pilot* (Valid through *${expiryFormattedReadable}*).\n\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `📱 *Your Private Store Portal:*\n` +
       `${portalUrl}\n` +
-      `_(View registered patients, 28-day countdown timers & retained revenue)_\n\n` +
+      `_(View registered patients, 28-day countdown timers & trial status)_\n\n` +
       `🖨️ *Print Your 4-in-1 Counter Bag Slips:*\n` +
       `${slipsUrl}\n` +
-      `_(Print 20 slips & drop them in customer bags at dispensing)_\n` +
+      `_(Print 20 slips & drop them in customer bags at dispensing)_\n\n` +
+      `💳 *Partner Retainer Billing:*\n` +
+      `${protocol}://${host}/billing/${slug}\n` +
+      `_(₦25,000/mo retainer starts after your 14-day trial)_\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
       `💡 *How It Works in 3 Steps:*\n` +
       `1. Your cashier drops a VIP Refill slip in patient bags.\n` +

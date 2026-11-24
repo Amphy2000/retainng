@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import QRCode from 'qrcode';
 import { useParams, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { getBusinessBySlug, getCustomers, getSales, syncFleetFromCloud } from '@/lib/storage';
 import { Business, Customer, SaleOrVisit } from '@/types';
 import { QrCodeModal } from '@/components/QrCodeModal';
@@ -267,6 +268,27 @@ function PortalInner() {
             <p className="text-xs text-slate-300 leading-relaxed">
               Drop these 4-in-1 slips into customer bags. When customers scan, their phone links to your store WhatsApp. Our AI concierge automatically reminds them before their medication runs out and routes their refill requests straight to your dispensary.
             </p>
+
+            {(business.subscription_status === 'trial' || (business.subscription_status as unknown as string) === '14-Day Free Pilot') && (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 text-emerald-300">
+                  <span className="text-base">🎁</span>
+                  <span>
+                    <strong>14-Day Free Partner Pilot:</strong>{' '}
+                    {business.subscription_renewal_date
+                      ? `Valid through ${new Date(business.subscription_renewal_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                      : '14 days remaining'}
+                  </span>
+                </div>
+                <Link
+                  href={`/billing/${business.opt_in_slug}`}
+                  target="_blank"
+                  className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 underline inline-flex items-center gap-1 shrink-0"
+                >
+                  <span>Billing Plan ↗</span>
+                </Link>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2.5 pt-1">
               <button

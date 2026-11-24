@@ -116,11 +116,19 @@ export default function AgencyRadarPage() {
 
   // Agency Retainer MRR calculations
   const agencyMRR = useMemo(() => {
-    return allBusinesses.reduce((acc, b) => acc + (b.monthly_retainer_ngn || 25000), 0);
+    return allBusinesses
+      .filter((b) => b.subscription_status === 'active')
+      .reduce((acc, b) => acc + (b.monthly_retainer_ngn || 25000), 0);
   }, [allBusinesses]);
 
   const paidSubscribersCount = useMemo(() => {
-    return allBusinesses.filter((b) => (b.subscription_status || 'active') === 'active').length;
+    return allBusinesses.filter((b) => b.subscription_status === 'active').length;
+  }, [allBusinesses]);
+
+  const trialCount = useMemo(() => {
+    return allBusinesses.filter(
+      (b) => b.subscription_status === 'trial' || (b.subscription_status as unknown as string) === '14-Day Free Pilot'
+    ).length;
   }, [allBusinesses]);
 
   // 100% REAL REFILL RADAR QUEUE (Derived directly from registered patients)
@@ -1000,7 +1008,9 @@ export default function AgencyRadarPage() {
             <div className="p-4 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Monthly MRR</span>
               <p className="text-2xl font-black text-emerald-600 leading-none">{formatNgn(agencyMRR)}</p>
-              <p className="text-xs text-slate-500 pt-0.5">Retainer revenue / month</p>
+              <p className="text-xs text-slate-500 pt-0.5">
+                {trialCount > 0 ? `${trialCount} in 14-day trial (${formatNgn(trialCount * 25000)} pipeline)` : 'Retainer revenue / month'}
+              </p>
             </div>
 
             <div className="p-4 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
@@ -1059,17 +1069,55 @@ export default function AgencyRadarPage() {
                         </div>
                       </div>
 
-                      <span
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full capitalize ${
-                          status === 'active'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : status === 'trial'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {status === 'active' ? '✓ Active' : status === 'trial' ? '🔵 14-Day Free Pilot' : '⏳ Pending'}
-                      </span>
+                      {(() => {
+                        const isTrial = status === 'trial' || (status as unknown as string) === '14-Day Free Pilot';
+                        let trialDaysLeft: number | null = null;
+                        if (isTrial && biz.subscription_renewal_date) {
+                          const expiry = new Date(biz.subscription_renewal_date);
+                          const diffTime = expiry.getTime() - Date.now();
+                          trialDaysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        }
+
+                        if (status === 'active') {
+                          return (
+                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              ✓ Active (Paid)
+                            </span>
+                          );
+                        }
+                        if (isTrial) {
+                          const label =
+                            trialDaysLeft !== null
+                              ? trialDaysLeft > 0
+                                ? `🔵 14-Day Pilot (${trialDaysLeft}d left)`
+                                : '⚠️ Pilot Ended'
+                              : '🔵 14-Day Pilot';
+                          return (
+                            <span
+                              className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200"
+                              title={
+                                biz.subscription_renewal_date
+                                  ? `Trial ends: ${biz.subscription_renewal_date}`
+                                  : undefined
+                              }
+                            >
+                              {label}
+                            </span>
+                          );
+                        }
+                        if (status === 'overdue') {
+                          return (
+                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+                              ⚠️ Overdue
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                            ⏳ Pending
+                          </span>
+                        );
+                      })()}
 
                       <Link
                         href={`/portal/${biz.opt_in_slug}`}
