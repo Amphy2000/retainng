@@ -120,7 +120,13 @@ function BillingPortalInner() {
       const data = await res.json();
 
       if (data.success) {
-        // Complete verification automatically and redirect to success
+        if (data.link) {
+          // Redirect merchant directly to Flutterwave Live Hosted Checkout (Cards, Bank Transfer, OPay)
+          window.location.href = data.link;
+          return;
+        }
+
+        // If direct verification flow
         const verifyRes = await fetch('/api/billing/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

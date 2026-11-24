@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle2, ShieldCheck, ArrowRight, Store, Bot } from 'lucide-react';
@@ -10,7 +10,22 @@ function SuccessInner() {
   const searchParams = useSearchParams();
   const plan = searchParams?.get('plan') || 'quarterly';
   const slug = searchParams?.get('slug') || '';
-  const amount = Number(searchParams?.get('amount')) || 67500;
+  const txRef = searchParams?.get('tx_ref') || searchParams?.get('transaction_id') || '';
+  const amount = Number(searchParams?.get('amount')) || (plan === 'annual' ? 240000 : plan === 'quarterly' ? 67500 : 25000);
+
+  useEffect(() => {
+    if (txRef && slug) {
+      fetch('/api/billing/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tx_ref: txRef,
+          plan_id: plan,
+          slug: slug,
+        }),
+      }).catch((e) => console.warn('Billing verification error:', e));
+    }
+  }, [txRef, slug, plan]);
 
   const planLabel =
     plan === 'annual'
@@ -59,23 +74,20 @@ function SuccessInner() {
         </div>
 
         <div className="space-y-2.5 pt-2">
-          {slug && (
+          {slug ? (
             <Link
               href={`/portal/${slug}`}
               className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-md cursor-pointer"
             >
               <Store className="w-4 h-4 text-slate-950" />
-              <span>Go to Partner Store Portal</span>
+              <span>Return to Store Portal</span>
               <ArrowRight className="w-4 h-4 text-slate-950" />
             </Link>
+          ) : (
+            <div className="text-xs text-slate-400 py-2">
+              You can now close this tab and return to WhatsApp.
+            </div>
           )}
-
-          <Link
-            href="/"
-            className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer border border-slate-700"
-          >
-            <span>Back to Agency Radar</span>
-          </Link>
         </div>
 
         <p className="text-[11px] text-slate-500 flex items-center justify-center gap-1">

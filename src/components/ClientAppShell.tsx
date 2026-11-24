@@ -11,7 +11,11 @@ import { ErrorBoundary } from './ErrorBoundary';
 
 function ShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isPublicPage = pathname?.startsWith('/opt-in') || pathname?.startsWith('/kiosk') || pathname?.startsWith('/portal');
+  const isPublicPage =
+    pathname?.startsWith('/opt-in') ||
+    pathname?.startsWith('/kiosk') ||
+    pathname?.startsWith('/portal') ||
+    pathname?.startsWith('/billing');
 
   const {
     refreshData,
