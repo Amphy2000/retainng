@@ -34,7 +34,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   } = useApp();
 
   if (isPublicPage) {
-    return <main>{children}</main>;
+    return <div id="public-shell" className="w-full min-h-screen">{children}</div>;
   }
 
   return (

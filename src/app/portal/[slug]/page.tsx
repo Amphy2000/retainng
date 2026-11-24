@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import QRCode from 'qrcode';
 import { useParams, useSearchParams } from 'next/navigation';
 import { getBusinessBySlug, getCustomers, getSales, syncFleetFromCloud } from '@/lib/storage';
 import { Business, Customer, SaleOrVisit } from '@/types';
@@ -36,15 +37,44 @@ function PortalInner() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [sales, setSales] = useState<SaleOrVisit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
   // QR Modal
-  const [qrOpen, setQrOpen] = useState(isPrintParam);
-  const [printMode, setPrintMode] = useState(isPrintParam);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [printMode, setPrintMode] = useState(false);
 
   function reloadData(bizId: string) {
     setCustomers(getCustomers(bizId));
     setSales(getSales(bizId));
   }
+
+  // Generate QR Code for native 4-in-1 print
+  useEffect(() => {
+    if (!business) return;
+    const isPharmacy = business.business_type === 'pharmacy' || business.name.toLowerCase().includes('pharm');
+    const useConcierge = business.whatsapp_routing_mode === 'agency_concierge' && business.concierge_phone;
+    const targetNumber = useConcierge ? business.concierge_phone! : (business.phone || '09169153129');
+    const digits = targetNumber.replace(/\D/g, '');
+    const intlPhone = digits.startsWith('0') ? `234${digits.slice(1)}` : digits;
+    const optInMsg = isPharmacy
+      ? `Hello! I want to enroll for VIP Refill Reminders and Care with ${business.name}. [ref:${business.opt_in_slug}]`
+      : `Hello! I am checking in with ${business.name} for VIP perks! [ref:${business.opt_in_slug}]`;
+    const waUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(optInMsg)}`;
+
+    QRCode.toDataURL(waUrl, { width: 320, margin: 2, color: { dark: '#0f172a', light: '#ffffff' } })
+      .then((url) => setQrDataUrl(url))
+      .catch((err) => console.warn('QR gen error:', err));
+  }, [business]);
+
+  // If URL has ?print=1, automatically trigger print once QR is ready
+  useEffect(() => {
+    if (isPrintParam && qrDataUrl) {
+      const timer = setTimeout(() => {
+        window.print();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isPrintParam, qrDataUrl]);
 
   // Exact timestamp formatter (e.g. "Today • 12:02 PM" or "Nov 24 • 12:02 PM")
   function formatExactDateTime(isoString?: string): string {
@@ -65,15 +95,6 @@ function PortalInner() {
     const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     return `${dateStr} • ${timeStr}`;
   }
-
-  // Handle URL query for direct print mode (?print=1 or ?print=true)
-  useEffect(() => {
-    const shouldPrint = searchParams.get('print') === '1' || searchParams.get('print') === 'true';
-    if (shouldPrint) {
-      setPrintMode(true);
-      setQrOpen(true);
-    }
-  }, [searchParams]);
 
   useEffect(() => {
     if (!slug) return;
@@ -223,133 +244,205 @@ function PortalInner() {
         </div>
       </header>
 
-      <main className="max-w-xl mx-auto px-4 py-5 space-y-4">
-        {/* ━━━ RETENTION CONCIERGE & BAG SLIPS HUB ━━━━━━━━━━━━━━━━━━━ */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-3xl p-6 border border-slate-800 shadow-xl space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
-                <QrCode className="w-5 h-5 text-emerald-400" />
+      <main className="max-w-xl mx-auto px-4 py-5 space-y-4 print:p-0 print:m-0 print:max-w-none print:w-full">
+        {/* SCREEN-ONLY CONTAINER (Hidden completely during @media print) */}
+        <div className="portal-screen-content space-y-4 print:hidden">
+          {/* ━━━ RETENTION CONCIERGE & BAG SLIPS HUB ━━━━━━━━━━━━━━━━━━━ */}
+          <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-3xl p-6 border border-slate-800 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+                  <QrCode className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-white">Prescription Bag Slips &amp; QR Concierge</h3>
+                  <p className="text-[11px] text-slate-400">Zero data entry • 100% automated customer refill retention</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-black text-sm text-white">Prescription Bag Slips &amp; QR Concierge</h3>
-                <p className="text-[11px] text-slate-400">Zero data entry • 100% automated customer refill retention</p>
-              </div>
+              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                AI Autopilot Active
+              </span>
             </div>
-            <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full uppercase tracking-wider">
-              AI Autopilot Active
-            </span>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Drop these 4-in-1 slips into customer bags. When customers scan, their phone links to your store WhatsApp. Our AI concierge automatically reminds them before their medication runs out and routes their refill requests straight to your dispensary.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                onClick={() => window.print()}
+                className="py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-md"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print 4-in-1 Bag Slips</span>
+              </button>
+              <button
+                onClick={() => { setPrintMode(false); setQrOpen(true); }}
+                className="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer border border-slate-700"
+              >
+                <QrCode className="w-4 h-4 text-emerald-400" />
+                <span>Show QR on Screen</span>
+              </button>
+            </div>
           </div>
 
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Drop these 4-in-1 slips into customer bags. When customers scan, their phone links to your store WhatsApp. Our AI concierge automatically reminds them before their medication runs out and routes their refill requests straight to your dispensary.
-          </p>
-
-          <div className="grid grid-cols-2 gap-2.5 pt-1">
-            <button
-              onClick={() => { setPrintMode(true); setQrOpen(true); }}
-              className="py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-md"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Print 4-in-1 Bag Slips</span>
-            </button>
-            <button
-              onClick={() => { setPrintMode(false); setQrOpen(true); }}
-              className="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer border border-slate-700"
-            >
-              <QrCode className="w-4 h-4 text-emerald-400" />
-              <span>Show QR on Screen</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ━━━ OWNER'S MONTHLY REPORT CARD ("WHAT RETRO DOING FOR YOU") ━━ */}
-        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-md p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Bot className="w-5 h-5 text-emerald-600" />
-              <h3 className="font-black text-sm text-slate-900">This Month&apos;s AI Agency Performance</h3>
-            </div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Automated
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2.5">
-            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3">
-              <div className="text-xl sm:text-2xl font-black text-emerald-700">{stats.recoveredCount}</div>
-              <div className="text-[11px] font-bold text-emerald-900 mt-0.5">Repeat Customers</div>
-              <div className="text-[10px] text-emerald-600">Kept coming back</div>
-            </div>
-
-            <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3">
-              <div className="text-xl sm:text-2xl font-black text-amber-700">{formatNgn(stats.estimatedValue)}</div>
-              <div className="text-[11px] font-bold text-amber-900 mt-0.5">Estimated Revenue</div>
-              <div className="text-[10px] text-amber-600">Protected by AI marketing</div>
-            </div>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
-              <div className="text-xl sm:text-2xl font-black text-slate-800">{stats.totalCusts}</div>
-              <div className="text-[11px] font-bold text-slate-700 mt-0.5">Registered Regulars</div>
-              <div className="text-[10px] text-slate-500">In your store VIP club</div>
-            </div>
-
-            <div className="bg-sky-50 border border-sky-100 rounded-2xl p-3">
-              <div className="text-xl sm:text-2xl font-black text-sky-700">
-                {stats.todayCusts > 0 ? `+${stats.todayCusts}` : stats.totalCusts}
+          {/* ━━━ OWNER'S MONTHLY REPORT CARD ("WHAT RETRO DOING FOR YOU") ━━ */}
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-md p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bot className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-black text-sm text-slate-900">This Month&apos;s AI Agency Performance</h3>
               </div>
-              <div className="text-[11px] font-bold text-sky-900 mt-0.5">
-                {stats.todayCusts > 0 ? 'Joined Today' : 'Total Client Base'}
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Automated
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3">
+                <div className="text-xl sm:text-2xl font-black text-emerald-700">{stats.recoveredCount}</div>
+                <div className="text-[11px] font-bold text-emerald-900 mt-0.5">Repeat Customers</div>
+                <div className="text-[10px] text-emerald-600">Kept coming back</div>
               </div>
-              <div className="text-[10px] text-sky-600">
-                {stats.todayCusts > 0 ? 'via Bag Slip QR' : '100% Bag Slip QR'}
+
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3">
+                <div className="text-xl sm:text-2xl font-black text-amber-700">{formatNgn(stats.estimatedValue)}</div>
+                <div className="text-[11px] font-bold text-amber-900 mt-0.5">Estimated Revenue</div>
+                <div className="text-[10px] text-amber-600">Protected by AI marketing</div>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                <div className="text-xl sm:text-2xl font-black text-slate-800">{stats.totalCusts}</div>
+                <div className="text-[11px] font-bold text-slate-700 mt-0.5">Registered Regulars</div>
+                <div className="text-[10px] text-slate-500">In your store VIP club</div>
+              </div>
+
+              <div className="bg-sky-50 border border-sky-100 rounded-2xl p-3">
+                <div className="text-xl sm:text-2xl font-black text-sky-700">
+                  {stats.todayCusts > 0 ? `+${stats.todayCusts}` : stats.totalCusts}
+                </div>
+                <div className="text-[11px] font-bold text-sky-900 mt-0.5">
+                  {stats.todayCusts > 0 ? 'Joined Today' : 'Total Client Base'}
+                </div>
+                <div className="text-[10px] text-sky-600">
+                  {stats.todayCusts > 0 ? 'via Bag Slip QR' : '100% Bag Slip QR'}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* ━━━ RECENT REFILL ALERTS & LINKED PATIENTS ━━━━━━━━━━━━━━━━━━━ */}
-        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-md p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-black text-sm text-slate-900">Recent Customer Activity</h3>
-            <span className="text-[11px] text-slate-500 font-semibold">{recentVisits.length} recorded</span>
-          </div>
-
-          {recentVisits.length === 0 ? (
-            <div className="text-center py-6 text-slate-400 text-xs">
-              No recent customer activity. New scans via bag slips will automatically appear here!
+          {/* ━━━ RECENT REFILL ALERTS & LINKED PATIENTS ━━━━━━━━━━━━━━━━━━━ */}
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-md p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-sm text-slate-900">Recent Customer Activity</h3>
+              <span className="text-[11px] text-slate-500 font-semibold">{recentVisits.length} recorded</span>
             </div>
-          ) : (
-            <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-              {recentVisits.map((v) => (
-                <div key={v.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100/60 transition">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
-                      {v.customer_name?.charAt(0) || 'C'}
+
+            {recentVisits.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 text-xs">
+                No recent customer activity. New scans via bag slips will automatically appear here!
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                {recentVisits.map((v) => (
+                  <div key={v.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100/60 transition">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
+                        {v.customer_name?.charAt(0) || 'C'}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-900 truncate">{v.customer_name}</div>
+                        <div className="text-[10px] text-slate-500 truncate">{v.service_or_product || 'Regular Refill'}</div>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-slate-900 truncate">{v.customer_name}</div>
-                      <div className="text-[10px] text-slate-500 truncate">{v.service_or_product || 'Regular Refill'}</div>
+                    <div className="text-right shrink-0 ml-2">
+                      <span
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full inline-block ${
+                          v.badgeColor === 'blue'
+                            ? 'text-blue-700 bg-blue-100 border border-blue-200'
+                            : 'text-emerald-700 bg-emerald-100 border border-emerald-200'
+                        }`}
+                      >
+                        {v.badgeText}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-semibold mt-0.5 block">
+                        {formatExactDateTime(v.created_at)}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-right shrink-0 ml-2">
-                    <span
-                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full inline-block ${
-                        v.badgeColor === 'blue'
-                          ? 'text-blue-700 bg-blue-100 border border-blue-200'
-                          : 'text-emerald-700 bg-emerald-100 border border-emerald-200'
-                      }`}
-                    >
-                      {v.badgeText}
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-semibold mt-0.5 block">
-                      {formatExactDateTime(v.created_at)}
-                    </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ━━━ NATIVE 4-IN-1 BAG SLIPS (ALWAYS PRINTS, ZERO MODAL DEPENDENCY) ━━━ */}
+        <div className="portal-native-slips w-full">
+          <div className="a4-printable-slips grid grid-cols-2 gap-3 p-0 bg-white">
+            {[1, 2, 3, 4].map((slip) => (
+              <div
+                key={slip}
+                className="a4-slip-item border-2 border-dashed border-slate-900 rounded-2xl p-4 bg-white text-center flex flex-col justify-between"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[9px] print:text-[8.5px] text-slate-500 font-extrabold uppercase tracking-wider border-b border-dashed border-slate-300 pb-1">
+                    <span>✂ Cut Line</span>
+                    <span>VIP Prescription Slip</span>
+                  </div>
+                  <div className="text-base font-black uppercase tracking-tight text-slate-950 truncate pt-0.5">
+                    {business?.name || 'Community Pharmacy'}
+                  </div>
+                  <div className="text-[10px] font-extrabold text-emerald-950 bg-emerald-100 px-3 py-0.5 rounded-full border border-emerald-300 inline-block">
+                    🎁 VIP HEALTH &amp; WELLNESS PASS
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+
+                <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2.5 text-left space-y-1.5 text-[9.5px] print:text-[9px] text-slate-900 my-1">
+                  <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
+                    <span className="text-sm">🎙️</span>
+                    <span>Voice Notes in Hausa, Yoruba, Igbo &amp; English</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
+                    <span className="text-sm">📸</span>
+                    <span>Snap Photo of Empty Blister Pack or Rx Paper</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
+                    <span className="text-sm">🚚</span>
+                    <span>28-Day Refill Timers &amp; Fast Doorstep Delivery</span>
+                  </div>
+                </div>
+
+                <div className="py-1">
+                  {qrDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={qrDataUrl}
+                      alt="Bag QR"
+                      className="w-28 h-28 sm:w-32 sm:h-32 print:w-32 print:h-32 mx-auto border-2 border-slate-900 rounded-2xl p-1 bg-white shadow-md"
+                    />
+                  ) : (
+                    <div className="w-32 h-32 mx-auto border-2 border-slate-300 rounded-2xl flex items-center justify-center text-[10px] text-slate-400">
+                      Generating QR...
+                    </div>
+                  )}
+                  <div className="text-[10px] print:text-[9.5px] font-black uppercase tracking-wider text-emerald-900 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 inline-block mt-1">
+                    📲 Scan with WhatsApp Camera
+                  </div>
+                </div>
+
+                <div className="text-[8px] print:text-[7.5px] text-slate-600 border-t border-slate-200 pt-1 font-semibold space-y-0.5">
+                  <div className="flex items-center justify-between">
+                    <span>✓ 100% Free Patient Concierge</span>
+                    <span>Keep with your medications</span>
+                  </div>
+                  <div className="text-[7.5px] print:text-[7px] text-slate-400 font-medium flex items-center justify-between pt-0.5 border-t border-dashed border-slate-200">
+                    <span>⚡ Powered by <strong>RetainNG AI</strong></span>
+                    <span>Hotline: <strong>+234 916 915 3129</strong></span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </main>
 
