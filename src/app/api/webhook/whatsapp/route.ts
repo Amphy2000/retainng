@@ -208,7 +208,8 @@ async function sendWhatsAppVoice(toPhone: string, audioUrl: string): Promise<voi
 async function callGeminiAI(
   systemPrompt: string,
   userMessage: string,
-  audioData?: { base64: string; mimeType: string }
+  audioData?: { base64: string; mimeType: string },
+  imageData?: { base64: string; mimeType: string }
 ): Promise<string> {
   const geminiApiKey = process.env.GEMINI_API_KEY || '';
 
@@ -223,6 +224,17 @@ async function callGeminiAI(
         mime_type: audioData.mimeType,
         data: audioData.base64,
       },
+    });
+  }
+  if (imageData?.base64) {
+    parts.push({
+      inline_data: {
+        mime_type: imageData.mimeType,
+        data: imageData.base64,
+      },
+    });
+    parts.push({
+      text: "The patient has sent a photo of their medication, blister strip, medicine container, or doctor's prescription paper. Carefully read the text on the pack: identify the exact medication name (brand or generic), dosage/strength (e.g. 10mg, 500mg, 1g), and quantity if visible. Confirm what you see and help them arrange their refill.",
     });
   }
   if (userMessage.trim()) {
@@ -373,6 +385,7 @@ export async function POST(req: NextRequest) {
 
     let isVoiceInput = false;
     let audioData: { base64: string; mimeType: string } | undefined = undefined;
+    let imageData: { base64: string; mimeType: string } | undefined = undefined;
 
     if (contentType.includes('application/x-www-form-urlencoded')) {
       const formData = await req.formData();
@@ -431,6 +444,30 @@ export async function POST(req: NextRequest) {
           }
         }
       }
+
+      // Check for incoming photo of medication or prescription
+      if (
+        msgType === 'imageMessage' ||
+        fileData?.mimeType?.startsWith('image')
+      ) {
+        if (fileData?.caption) {
+          messageBody = `${fileData.caption} ${messageBody}`.trim();
+        }
+        if (fileData?.downloadUrl) {
+          try {
+            const imgRes = await fetch(fileData.downloadUrl);
+            if (imgRes.ok) {
+              const buf = await imgRes.arrayBuffer();
+              imageData = {
+                base64: Buffer.from(buf).toString('base64'),
+                mimeType: fileData.mimeType || 'image/jpeg',
+              };
+            }
+          } catch (e) {
+            console.warn('Image download failed:', e);
+          }
+        }
+      }
     }
 
     // Clean & normalize phone
@@ -451,12 +488,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ignored: 'self-message' });
     }
 
-    if (!messageBody.trim() && !audioData) {
+    if (!messageBody.trim() && !audioData && !imageData) {
       return NextResponse.json({ ignored: 'empty-message' });
     }
 
     if (!messageBody.trim() && audioData) {
       messageBody = '[Voice Note Message]';
+    }
+
+    if (!messageBody.trim() && imageData) {
+      messageBody = '[Photo of medication blister pack or doctor prescription]';
     }
 
     // --- Multi-Business attribution resolution ---
@@ -540,6 +581,12 @@ CLINICAL & REFILL INTELLIGENCE:
 3. If they give a delivery address: confirm the address warmly and let them know our dispensary team is packing it.
 4. Voice Note Friendly: Keep replies natural, human, conversational, and under 60 words so it sounds smooth when played as a voice note. Never use numbered menus or robotic phrases.
 
+📸 PHOTO & PRESCRIPTION SCANNER:
+When the patient sends a photo of their drug box, blister strip, or doctor prescription:
+- Inspect the photo carefully: identify the exact medication name and dosage (e.g. "Amlodipine 10mg", "Metformin 500mg", "Lonart DS").
+- Warmly confirm the medication you recognized from the photo in their language (e.g. "I see your Amlodipine 10mg in the photo! 💊").
+- Ask if they want a fresh pack prepared for home delivery or pickup.
+
 METADATA TAGS AT THE VERY END (each on its own line):
 ORDER_DETECTED: [detected medication or item, or NONE]
 LANG: [ha | yo | ig | ar | en]`;
@@ -555,7 +602,8 @@ ALWAYS REPLY IN THE EXACT SAME LANGUAGE OR DIALECT the patient used!
 Guidelines:
 1. Greet them warmly in their language/dialect.
 2. If they ask for a refill or service without stating which pharmacy they visit: ask them which partner store they are registered with so you can route their order immediately.
-3. Keep replies friendly, concise (under 60 words), and voice-note ready.
+3. If they send a photo of their medication box or prescription: read the medication name and dosage, confirm what you see, and help them arrange the order.
+4. Keep replies friendly, concise (under 60 words), and voice-note ready.
 
 METADATA TAGS AT THE VERY END (each on its own line):
 ORDER_DETECTED: [detected medication or item, or NONE]
@@ -568,7 +616,7 @@ LANG: [ha | yo | ig | ar | en]`;
     let detectedLang = 'en';
 
     try {
-      const rawAiReply = await callGeminiAI(systemPrompt, messageBody, audioData);
+      const rawAiReply = await callGeminiAI(systemPrompt, messageBody, audioData, imageData);
 
       if (rawAiReply.includes('LANG:')) {
         const langMatch = rawAiReply.match(/LANG:\s*([a-z]{2})/i);
