@@ -677,21 +677,14 @@ export async function POST(req: NextRequest) {
       const greeting = profileName ? ` ${profileName}` : '';
       const bizDisplay = activeBizName || 'your pharmacy';
       const reply =
-        `🎉 *Welcome${greeting} to ${bizDisplay} Care Concierge!*\n\n` +
-        `Your WhatsApp is now linked to *${bizDisplay}*. You will *never need to scan or type a code again.* 💊\n\n` +
-        `🤖 *Here is everything I can do for you 24/7:*\n\n` +
-        `🎙️ *Voice Notes in Your Native Tongue:*\n` +
-        `You don't have to type! Simply hold the mic and speak in *Hausa, Yoruba, Igbo, Pidgin, or English*. I understand and speak back in your language.\n\n` +
-        `📸 *Snap & Send Photos:*\n` +
-        `Running low on drugs? Just snap a photo of your empty blister strip, medicine container, or doctor's prescription slip and send it here.\n\n` +
-        `💬 *Ask Questions in Natural Language:*\n` +
-        `Ask "How do I take this medicine?", "Can I take it before meals?", or "Is this safe for high BP?" anytime.\n\n` +
-        `🚚 *Fast Doorstep Delivery:*\n` +
-        `Just say "Please deliver my refill to Barnawa" and our dispensary will pack and dispatch it directly to your address.\n\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `👉 *Let's set up your refill care clock now:*\n` +
-        `*What medication did you pick up today?*\n` +
-        `_(Reply with the name, hold the mic to send a voice note, or snap a photo of your pack right now!)_`;
+        `🎉 *Welcome${greeting} to ${bizDisplay}!* 💊\n\n` +
+        `Your WhatsApp is now linked — you never need to scan again.\n\n` +
+        `I am your 24/7 personal care assistant. You can:\n` +
+        `🎙️ *Send Voice Notes* in Hausa, Yoruba, Igbo, or English\n` +
+        `📸 *Snap photos* of your medicine pack or prescription\n` +
+        `🚚 *Request refills & home delivery* anytime\n\n` +
+        `👉 *What medication did you pick up today?*\n` +
+        `_(Type it, hold mic to speak, or snap a quick photo!)_`;
 
       await sendWhatsApp(cleanPhone, reply);
 
