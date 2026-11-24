@@ -34,6 +34,8 @@ import {
   Filter,
   Info,
   HelpCircle,
+  ExternalLink,
+  Printer,
 } from 'lucide-react';
 
 const BIZ_ICONS: Record<string, string> = {
@@ -1051,12 +1053,32 @@ export default function AgencyRadarPage() {
                       </span>
 
                       <Link
+                        href={`/portal/${biz.opt_in_slug}`}
+                        target="_blank"
+                        className="px-2.5 py-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition flex items-center gap-1 shadow-xs"
+                        title="Open Private Store Portal"
+                      >
+                        <ExternalLink className="w-3 h-3 text-white" />
+                        <span>Store Portal</span>
+                      </Link>
+
+                      <Link
+                        href={`/portal/${biz.opt_in_slug}?print=1`}
+                        target="_blank"
+                        className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg transition flex items-center gap-1 border border-slate-300 shadow-xs"
+                        title="Print 4-in-1 Counter Bag Slips"
+                      >
+                        <Printer className="w-3 h-3 text-slate-600" />
+                        <span>Print Slips</span>
+                      </Link>
+
+                      <Link
                         href={`/billing/${biz.opt_in_slug}`}
                         target="_blank"
                         className="px-2.5 py-1 text-[11px] font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition flex items-center gap-1 shadow-xs"
                       >
                         <CreditCard className="w-3 h-3 text-emerald-400" />
-                        <span>Billing Portal</span>
+                        <span>Billing</span>
                       </Link>
 
                       <Link

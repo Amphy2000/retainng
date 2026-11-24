@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
+import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
 import { getBusinesses, getCustomers } from '@/lib/storage';
 import { formatNgn, formatRelativeTime, getWhatsAppUrl } from '@/lib/utils';
@@ -19,6 +20,8 @@ import {
   Shirt,
   Calendar,
   CheckCircle2,
+  ExternalLink,
+  Printer,
 } from 'lucide-react';
 
 export default function CustomersPage() {
@@ -222,18 +225,41 @@ export default function CustomersPage() {
             <Building2 className="w-4 h-4 text-emerald-600" />
             <span className="text-xs font-bold text-slate-800">Filter by Store:</span>
           </div>
-          <select
-            value={selectedBizFilter}
-            onChange={(e) => setSelectedBizFilter(e.target.value)}
-            className="text-xs font-bold px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full sm:w-64 cursor-pointer"
-          >
-            <option value="all">🌍 All Stores (Agency Fleet Total)</option>
-            {allBusinesses.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+            <select
+              value={selectedBizFilter}
+              onChange={(e) => setSelectedBizFilter(e.target.value)}
+              className="text-xs font-bold px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full sm:w-60 cursor-pointer"
+            >
+              <option value="all">🌍 All Stores (Agency Fleet Total)</option>
+              {allBusinesses.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+
+            {selectedBizObj && (
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/portal/${selectedBizObj.opt_in_slug}`}
+                  target="_blank"
+                  className="px-2.5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition flex items-center gap-1 shadow-xs"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Store Portal</span>
+                </Link>
+                <Link
+                  href={`/portal/${selectedBizObj.opt_in_slug}?print=1`}
+                  target="_blank"
+                  className="px-2.5 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl transition flex items-center gap-1 border border-slate-300 shadow-xs"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Slips</span>
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Search */}
