@@ -10,12 +10,18 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { customerId, phone, name, businessName, medication, dialect } = body;
 
-    const targetPhone = (phone || '').replace(/[^0-9]/g, '');
-    if (!targetPhone) {
+    let cleanPhone = (phone || '').replace(/[^0-9]/g, '');
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '234' + cleanPhone.slice(1);
+    } else if (!cleanPhone.startsWith('234') && cleanPhone.length === 10) {
+      cleanPhone = '234' + cleanPhone;
+    }
+
+    if (!cleanPhone) {
       return NextResponse.json({ success: false, error: 'Target phone is missing' }, { status: 400 });
     }
 
-    const chatId = `${targetPhone}@c.us`;
+    const chatId = `${cleanPhone}@c.us`;
     const store = businessName || 'Your Community Pharmacy';
     const patientName = name || 'Valued Patient';
     const medName = medication || 'routine medication';
@@ -47,10 +53,32 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json();
 
+    // 100% Real Audit Log in Supabase
+    if (supabaseAdmin && res.ok) {
+      try {
+        const { data: bizList } = await supabaseAdmin.from('businesses').select('id, name');
+        const matchedBiz = bizList?.find((b) => b.name.toLowerCase().includes(store.toLowerCase())) || bizList?.[0];
+
+        if (matchedBiz) {
+          await supabaseAdmin.from('sales_or_visits').insert({
+            business_id: matchedBiz.id,
+            customer_name: patientName,
+            customer_phone: `+${cleanPhone}`,
+            service_or_product: 'On-Demand Refill Nudge Dispatched',
+            amount_ngn: 0,
+            is_manual_entry: false,
+            notes: `Dispatched WhatsApp reminder for ${medName}. GreenAPI ID: ${data.idMessage || 'Sent'}.`,
+          });
+        }
+      } catch (err) {
+        console.warn('Supabase log error on nudge:', err);
+      }
+    }
+
     return NextResponse.json({
       success: res.ok,
-      messageId: data.idMessage,
-      recipient: targetPhone,
+      messageId: data?.idMessage,
+      recipient: cleanPhone,
       patientName,
       medication: medName,
       sentMessage: message,
