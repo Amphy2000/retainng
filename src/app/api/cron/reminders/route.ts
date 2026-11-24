@@ -134,6 +134,59 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // --- 1B. DAILY SUBSCRIPTION EXPIRY & ANTI-CHEAT ENFORCEMENT ---
+  if (supabaseAdmin) {
+    try {
+      const { data: allBiz } = await supabaseAdmin
+        .from('businesses')
+        .select('id, name, opt_in_slug, subscription_status, subscription_renewal_date, manager_phone');
+
+      const host = req.headers.get('host') || 'retainng.vercel.app';
+      const protocol = host.includes('localhost') ? 'http' : 'https';
+
+      for (const biz of allBiz || []) {
+        if (!biz.subscription_renewal_date) continue;
+        const targetPhone = biz.manager_phone || '2349169153129';
+        const renewalDate = new Date(biz.subscription_renewal_date);
+        const daysUntilExpiry = Math.ceil((renewalDate.getTime() - now.getTime()) / 86400000);
+        const billingUrl = `${protocol}://${host}/billing/${biz.opt_in_slug}`;
+
+        // 1. Expired / Overdue enforcement (Day 0 or past)
+        if (daysUntilExpiry <= 0 && biz.subscription_status !== 'overdue') {
+          await supabaseAdmin
+            .from('businesses')
+            .update({ subscription_status: 'overdue', updated_at: new Date().toISOString() })
+            .eq('id', biz.id);
+
+          const overdueAlert =
+            `⚠️ *SERVICE SUSPENDED — ${biz.name.toUpperCase()}*\n\n` +
+            `Your monthly RetainNG Agency Retainer expired on *${biz.subscription_renewal_date}*.\n\n` +
+            `🛑 Automated WhatsApp refill concierge has been paused for your store.\n` +
+            `👉 *Renew now to reactivate immediately (Save up to 20% on Quarterly/Annual):*\n` +
+            `${billingUrl}`;
+
+          await sendWhatsApp(targetPhone, overdueAlert);
+        }
+
+        // 2. 5 Days & 2 Days Before Expiry Warning
+        if (daysUntilExpiry === 5 || daysUntilExpiry === 2) {
+          const reminderNotice =
+            `📅 *SUBSCRIPTION RENEWAL REMINDER — ${biz.name.toUpperCase()}*\n\n` +
+            `Your RetainNG Agency Retainer renews in *${daysUntilExpiry} days* on *${biz.subscription_renewal_date}*.\n\n` +
+            `Select your preferred billing cycle:\n` +
+            `• Monthly: ₦25,000\n` +
+            `• Quarterly (10% OFF): ₦67,500 (Save ₦7,500)\n` +
+            `• Annual (20% OFF): ₦240,000 (Save ₦60,000)\n\n` +
+            `👉 *Renew here in 30 seconds:* ${billingUrl}`;
+
+          await sendWhatsApp(targetPhone, reminderNotice);
+        }
+      }
+    } catch (e) {
+      console.warn('Subscription expiry check error:', e);
+    }
+  }
+
   // --- 2. PROACTIVE CHRONIC REFILL, ADHERENCE & WELLNESS VOICE NOTES ---
   if (supabaseAdmin) {
     try {

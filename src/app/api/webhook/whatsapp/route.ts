@@ -886,6 +886,44 @@ LANG: [ha | yo | ig | ar | en]`;
 
     // Send manager dispatch alert for refill orders
     if (isOrder) {
+      // --- ANTI-CHEAT CHECK: Verify if business subscription is overdue ---
+      if (supabaseAdmin && activeSlug) {
+        try {
+          const { data: bCheck } = await supabaseAdmin
+            .from('businesses')
+            .select('name, subscription_status, manager_phone')
+            .eq('opt_in_slug', activeSlug)
+            .maybeSingle();
+
+          if (bCheck && bCheck.subscription_status === 'overdue') {
+            const maintMsg =
+              `Sannu! Currently, our automated digital concierge for *${bCheck.name}* is undergoing maintenance. ` +
+              `Please visit or call the pharmacy dispensary counter directly to pick up your medication. Thank you! 💊`;
+            await sendWhatsApp(cleanPhone, maintMsg);
+
+            const mgrPhone = bCheck.manager_phone || await getManagerPhone(activeSlug, host);
+            const protocol = host.includes('localhost') ? 'http' : 'https';
+            const billingUrl = `${protocol}://${host}/billing/${activeSlug}`;
+
+            const blockNotice =
+              `🚨 *PATIENT REFILL BLOCKED — UNPAID RETAINER*\n\n` +
+              `👤 Patient *${displayName}* (+${cleanPhone}) just attempted to order *${detectedMed || messageBody}* on WhatsApp, but your store's subscription is OVERDUE.\n\n` +
+              `🛑 Automated refill routing is suspended until renewed.\n` +
+              `👉 *Renew now to unblock immediately:* ${billingUrl}`;
+
+            await sendWhatsApp(mgrPhone, blockNotice);
+
+            return NextResponse.json({
+              success: false,
+              reason: 'subscription_overdue',
+              business: bCheck.name,
+            });
+          }
+        } catch (err) {
+          console.warn('Subscription check warning:', err);
+        }
+      }
+
       // Record refill order to Supabase
       recordOrderToSupabase({
         phone: cleanPhone,
