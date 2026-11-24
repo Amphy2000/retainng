@@ -873,17 +873,12 @@ LANG: [ha | yo | ig | ar | en]`;
       if (managerPhone && managerPhone !== cleanPhone) {
         const targetStore = activeBizName || 'RetainNG Partner Store';
         const managerAlert =
-          `🚨 *NEW REFILL / SERVICE ORDER — ${targetStore}*\n\n` +
-          `👤 *Customer:* ${displayName} (WhatsApp: ...${cleanPhone.slice(-4)})\n` +
+          `🚨 *NEW REFILL ORDER — ${targetStore}*\n\n` +
+          `👤 *Patient:* ${displayName}\n` +
           `📱 *Phone:* +${cleanPhone}\n` +
-          `💊 *Order / Request:* ${detectedMed || messageBody}\n` +
-          `💰 *Estimated Value:* ₦4,500\n` +
-          `⏱️ *Status:* Pending Dispensary Packing\n\n` +
-          `━━━━━━━━━━━━━━━━━━━━━\n` +
-          `⚡ *1-TAP DISPATCH COMMAND:*\n` +
-          `When packed & rider leaves, reply:\n` +
-          `👉 *DISPATCH ${cleanPhone.slice(-4)}*\n\n` +
-          `The bot will automatically notify the patient via WhatsApp & Voice Note in their dialect! 🛵💨`;
+          `💊 *Medication:* ${detectedMed || messageBody}\n\n` +
+          `👉 *To alert patient when rider leaves:* Reply *DISPATCH ${cleanPhone.slice(-4)}* (bot will notify them in their dialect).\n` +
+          `📞 Or tap their phone number above to call them directly.`;
 
         await sendWhatsApp(managerPhone, managerAlert);
       }
