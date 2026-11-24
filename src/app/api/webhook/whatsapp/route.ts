@@ -1488,22 +1488,16 @@ export async function GET() {
 
   if (geminiApiKey) {
     try {
-      const testRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: 'Reply with the word "PONG" and nothing else.' }] }],
-          }),
-        }
+      const listRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`
       );
-      const text = await testRes.text();
+      const listData = await listRes.json();
+      const modelNames = listData?.models ? listData.models.map((m: { name: string }) => m.name) : [];
       geminiTestResult = {
         ...geminiTestResult,
-        status: testRes.status,
-        statusText: testRes.statusText,
-        response_preview: text.slice(0, 300),
+        list_status: listRes.status,
+        available_models: modelNames.slice(0, 15),
+        raw_list: modelNames.length === 0 ? listData : undefined,
       };
     } catch (err: unknown) {
       geminiTestResult = {
