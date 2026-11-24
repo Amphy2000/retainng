@@ -227,11 +227,31 @@ function OptInFormContent() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
-                  Stay Connected & Enjoy Perks
+                  Stay Connected &amp; Enjoy VIP Care
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                  Join our VIP customer list for direct appointment scheduling, reminders, and occasional loyalty specials.
+                  Join our VIP refill &amp; health concierge list. Zero apps needed — everything works directly over WhatsApp.
                 </p>
+              </div>
+
+              {/* Bot Superpowers Guide */}
+              <div className="grid grid-cols-2 gap-2 p-3 bg-emerald-50/70 rounded-2xl border border-emerald-100 text-left text-[11px] text-emerald-950">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <span>🎙️</span>
+                  <span>Voice Notes (Native Dialects)</span>
+                </div>
+                <div className="flex items-center gap-1.5 font-bold">
+                  <span>📸</span>
+                  <span>Snap Photos of Blisters / Rx</span>
+                </div>
+                <div className="flex items-center gap-1.5 font-bold">
+                  <span>🚚</span>
+                  <span>1-Tap Refill Delivery</span>
+                </div>
+                <div className="flex items-center gap-1.5 font-bold">
+                  <span>💬</span>
+                  <span>Natural Dosage &amp; Care Chat</span>
+                </div>
               </div>
 
               {errorMessage && (

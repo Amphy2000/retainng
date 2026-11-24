@@ -678,11 +678,20 @@ export async function POST(req: NextRequest) {
       const bizDisplay = activeBizName || 'your pharmacy';
       const reply =
         `🎉 *Welcome${greeting} to ${bizDisplay} Care Concierge!*\n\n` +
-        `Your phone number (*...${cleanPhone.slice(-4)}*) is now linked to ${bizDisplay}. ` +
-        `You will *never need to scan or type a code again.* 💊\n\n` +
-        `To help our team remind you on time before your medications finish:\n` +
-        `👉 *What medication did you pick up today?* (e.g. _"BP drugs"_, _"Diabetes"_, _"Malaria"_, or _"Vitamins"_)\n\n` +
-        `Just reply here with the name, and we'll take care of the rest!`;
+        `Your WhatsApp is now linked to *${bizDisplay}*. You will *never need to scan or type a code again.* 💊\n\n` +
+        `🤖 *Here is everything I can do for you 24/7:*\n\n` +
+        `🎙️ *Voice Notes in Your Native Tongue:*\n` +
+        `You don't have to type! Simply hold the mic and speak in *Hausa, Yoruba, Igbo, Pidgin, or English*. I understand and speak back in your language.\n\n` +
+        `📸 *Snap & Send Photos:*\n` +
+        `Running low on drugs? Just snap a photo of your empty blister strip, medicine container, or doctor's prescription slip and send it here.\n\n` +
+        `💬 *Ask Questions in Natural Language:*\n` +
+        `Ask "How do I take this medicine?", "Can I take it before meals?", or "Is this safe for high BP?" anytime.\n\n` +
+        `🚚 *Fast Doorstep Delivery:*\n` +
+        `Just say "Please deliver my refill to Barnawa" and our dispensary will pack and dispatch it directly to your address.\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `👉 *Let's set up your refill care clock now:*\n` +
+        `*What medication did you pick up today?*\n` +
+        `_(Reply with the name, hold the mic to send a voice note, or snap a photo of your pack right now!)_`;
 
       await sendWhatsApp(cleanPhone, reply);
 

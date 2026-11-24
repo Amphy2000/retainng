@@ -358,18 +358,18 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
                       </div>
 
                       {business.business_type === 'pharmacy' || business.name.toLowerCase().includes('pharm') ? (
-                        <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-2.5 text-left space-y-1.5 text-[9.5px] text-slate-800">
-                          <div className="flex items-start gap-1.5 font-bold text-emerald-900">
-                            <span className="text-emerald-600 font-black">✓</span>
-                            <span>Automatic Refill Alerts (Never run out of meds)</span>
+                        <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-2 text-left space-y-1 text-[9px] text-slate-800">
+                          <div className="flex items-start gap-1 font-bold text-emerald-900">
+                            <span className="text-emerald-600 font-black">🎙️</span>
+                            <span>Voice Notes (Hausa, Yoruba, Igbo, English)</span>
                           </div>
-                          <div className="flex items-start gap-1.5 font-bold text-emerald-900">
-                            <span className="text-emerald-600 font-black">✓</span>
-                            <span>Free In-Store BP &amp; Blood Sugar Checks</span>
+                          <div className="flex items-start gap-1 font-bold text-emerald-900">
+                            <span className="text-emerald-600 font-black">📸</span>
+                            <span>Snap Photo of Empty Pack or Prescription</span>
                           </div>
-                          <div className="flex items-start gap-1.5 font-bold text-emerald-900">
-                            <span className="text-emerald-600 font-black">✓</span>
-                            <span>24/7 Doorstep Delivery &amp; Pharmacist Chat</span>
+                          <div className="flex items-start gap-1 font-bold text-emerald-900">
+                            <span className="text-emerald-600 font-black">🚚</span>
+                            <span>Refill Countdown Timers &amp; Doorstep Delivery</span>
                           </div>
                         </div>
                       ) : (
