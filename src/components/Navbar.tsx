@@ -21,6 +21,7 @@ import {
   PieChart,
   Menu,
   X,
+  Lock,
 } from 'lucide-react';
 
 interface Props {
@@ -245,6 +246,21 @@ export function Navbar({ onOpenRecordModal, onOpenQrModal, onBusinessChanged }: 
                 </>
               )}
             </div>
+
+            {/* Founder Lock Button */}
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('retainng_founder_unlocked');
+                  window.location.reload();
+                }
+              }}
+              title="Lock Radar Dashboard (PIN Protected)"
+              className="hidden sm:flex items-center gap-1 px-2 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-800 rounded-lg transition text-xs cursor-pointer"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-bold">Lock</span>
+            </button>
 
             {/* Mobile hamburger */}
             <button

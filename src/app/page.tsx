@@ -355,8 +355,11 @@ export default function AgencyRadarPage() {
                       <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">
                         <div className="text-right">
                           <div className="text-sm font-black text-slate-900">{formatNgn(retainer)}/mo</div>
+                          <div className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60 inline-block">
+                            {retainer === 22500 ? 'Quarterly (10% OFF)' : retainer === 20000 ? 'Annual (20% OFF)' : 'Monthly Plan'}
+                          </div>
                           {biz.subscription_renewal_date && (
-                            <div className="text-[10px] text-slate-400">Renews {biz.subscription_renewal_date}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">Renews {biz.subscription_renewal_date}</div>
                           )}
                         </div>
 

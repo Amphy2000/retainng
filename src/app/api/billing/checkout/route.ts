@@ -83,57 +83,63 @@ export async function POST(req: NextRequest) {
     const txRef = `retainng_${planKey}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const host = req.headers.get('host') || 'retainng.vercel.app';
     const protocol = host.includes('localhost') ? 'http' : 'https';
-    const redirectUrl = `${protocol}://${host}/billing/success?tx_ref=${txRef}&plan=${planKey}&slug=${slug || ''}`;
+    const redirectUrl = `${protocol}://${host}/billing/success?tx_ref=${txRef}&plan=${planKey}&slug=${slug || ''}&amount=${plan.amount}`;
 
-    // Get live Flutterwave v4 access token
-    const token = await getFlutterwaveToken();
+    const secretKey = process.env.FLW_SECRET_KEY || 'FLWSECK-1ca7dde57593bd12913c122936030bfe-1a20b64a5d1vt-X';
+    let checkoutLink = '';
 
-    // Create or retrieve customer in Flutterwave v4
-    let customerId: string | undefined;
-    if (token) {
-      try {
-        const custRes = await fetch('https://f4bexperience.flutterwave.com/customers', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
+    try {
+      const payRes = await fetch('https://api.flutterwave.com/v3/payments', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${secretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tx_ref: txRef,
+          amount: plan.amount,
+          currency: 'NGN',
+          redirect_url: redirectUrl,
+          customer: {
+            email: email || 'billing@retainng.com',
+            phonenumber: phone_number || '09169153129',
+            name: name || 'Partner Business',
           },
-          body: JSON.stringify({
-            email: email || `billing_${Date.now()}@retainng.com`,
-            name: {
-              first: (name || 'Store').split(' ')[0] || 'Store',
-              last: (name || 'Partner').split(' ').slice(1).join(' ') || 'Partner',
-            },
-            phone: {
-              country_code: '234',
-              number: (phone_number || '9169153129').replace(/[^0-9]/g, '').slice(-10),
-            },
-          }),
-        });
-        const custData = await custRes.json();
-        if (custData?.data?.id) {
-          customerId = custData.data.id;
-        }
-      } catch (e) {
-        console.warn('Flutterwave customer creation notice:', e);
+          customizations: {
+            title: `RetainNG — ${plan.name}`,
+            description: `Subscription Retainer for ${name || 'Partner Store'}`,
+            logo: 'https://retainng.vercel.app/icon.png',
+          },
+          meta: {
+            slug: slug || '',
+            business_id: business_id || '',
+            plan: planKey,
+          },
+        }),
+      });
+
+      const payData = await payRes.json();
+      if (payData?.status === 'success' && payData?.data?.link) {
+        checkoutLink = payData.data.link;
       }
+    } catch (e) {
+      console.warn('Flutterwave hosted link error:', e);
     }
 
-    // Return checkout payload to client
+    // Return checkout payload with live Flutterwave payment link
     return NextResponse.json({
       success: true,
       tx_ref: txRef,
       amount: plan.amount,
       currency: 'NGN',
       plan,
+      link: checkoutLink,
       redirect_url: redirectUrl,
-      customer_id: customerId,
       customer: {
         email: email || 'billing@retainng.com',
         phone_number: phone_number || '09169153129',
         name: name || 'Partner Business',
       },
-      merchant_id: '100520338',
     });
   } catch (err: unknown) {
     console.error('Checkout error:', err);

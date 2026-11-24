@@ -442,19 +442,84 @@ function SettingsContent() {
 
           {/* Agency Retainer & Subscription (Founder Controls) */}
           <div className="p-4 sm:p-5 bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl border border-slate-800 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                  Founder Revenue Controls
-                </span>
-                <h4 className="text-sm font-bold text-white mt-1">Agency Retainer &amp; Subscription Billing</h4>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                    Founder Revenue Controls
+                  </span>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                    {Number(monthlyRetainer) === 22500 ? '⚡ Quarterly Plan (10% OFF)' : Number(monthlyRetainer) === 20000 ? '🔥 Annual Plan (20% OFF)' : Number(monthlyRetainer) === 25000 ? 'Standard Monthly Plan' : 'Custom Tier'}
+                  </span>
+                </div>
+                <h4 className="text-sm font-bold text-white mt-1.5">Agency Retainer &amp; Subscription Billing</h4>
                 <p className="text-xs text-slate-400">
-                  Manage this client&apos;s monthly SaaS retainer, subscription standing, and renewal schedule.
+                  Manage this client&apos;s SaaS retainer standing, renewal schedule, and Flutterwave subscription status.
                 </p>
               </div>
-              <span className="text-xs font-bold text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800 px-3 py-1.5 rounded-xl">
-                ₦{Number(monthlyRetainer).toLocaleString()}/mo
-              </span>
+              <div className="text-right flex sm:flex-col items-center sm:items-end justify-between gap-1">
+                <span className="text-xs font-bold text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800 px-3 py-1.5 rounded-xl">
+                  ₦{Number(monthlyRetainer).toLocaleString()}/mo
+                </span>
+                {activeBusiness?.opt_in_slug && (
+                  <Link
+                    href={`/billing/${activeBusiness.opt_in_slug}`}
+                    target="_blank"
+                    className="text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 underline inline-flex items-center gap-1"
+                  >
+                    <span>View Partner Billing Page ↗</span>
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Plan Presets */}
+            <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 space-y-1.5">
+              <span className="text-[11px] font-bold text-slate-300 block">Select Active Plan Tier:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMonthlyRetainer(25000)}
+                  className={`px-3 py-2 rounded-xl text-left border transition text-xs flex flex-col cursor-pointer ${
+                    Number(monthlyRetainer) === 25000
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 font-bold'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <span className="font-bold">Monthly Plan</span>
+                  <span className="text-[10px] text-slate-400 font-mono">₦25,000 / month</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonthlyRetainer(22500)}
+                  className={`px-3 py-2 rounded-xl text-left border transition text-xs flex flex-col cursor-pointer ${
+                    Number(monthlyRetainer) === 22500
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 font-bold'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold">Quarterly (3 Mo)</span>
+                    <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded font-black">10% OFF</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">₦22,500/mo (₦67.5k billed)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonthlyRetainer(20000)}
+                  className={`px-3 py-2 rounded-xl text-left border transition text-xs flex flex-col cursor-pointer ${
+                    Number(monthlyRetainer) === 20000
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 font-bold'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold">Annual (12 Mo)</span>
+                    <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded font-black">20% OFF</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">₦20,000/mo (₦240k billed)</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
@@ -505,7 +570,7 @@ function SettingsContent() {
             <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
               <span className="flex items-center gap-1.5 text-slate-300">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span>Flutterwave Auto-Debit Integration ready</span>
+                <span>Flutterwave Live V3 Auto-Debit &amp; Hosted Checkout active</span>
               </span>
               <span className="text-slate-500">Auto-billed on the 1st of every month</span>
             </div>
