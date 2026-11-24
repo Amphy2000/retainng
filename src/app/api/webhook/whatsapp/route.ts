@@ -225,6 +225,25 @@ async function callGeminiAI(
   if (cleanAudioMime === 'audio/opus') cleanAudioMime = 'audio/ogg';
   const cleanImageMime = imageData?.mimeType ? imageData.mimeType.split(';')[0].trim() : 'image/jpeg';
 
+  // 2. Format conversation context into the prompt (universal compatibility across all Gemini endpoints)
+  let conversationHistoryContext = '';
+  if (phoneKey && userConversationHistory[phoneKey] && userConversationHistory[phoneKey].length > 0) {
+    const history = userConversationHistory[phoneKey].slice(-6);
+    conversationHistoryContext = `\n\n📜 RECENT CONVERSATION HISTORY (What was just discussed with this patient):\n` +
+      history
+        .map((h) => `${h.role === 'user' ? 'Patient' : 'Assistant'}: "${h.parts?.[0]?.text || ''}"`)
+        .join('\n') +
+      `\n\n🚨 CRITICAL CONTINUATION INSTRUCTION:
+The patient's new message is directly replying to the conversation history above!
+- If the patient replies "Yes", "Okay", "Gida", "Kawo", "Karba", "Pick up", "Delivery", or confirms an offer: understand their reply in context of the last question!
+- If you asked whether they want delivery or pickup, and they say "Yes" or "Deliver", confirm delivery and ask for their address or let them know it's being packed.
+- If you asked which pharmacy they use, and they name one, route them to that pharmacy.
+- ALWAYS respond in the exact language or dialect the patient is using (Hausa, Yoruba, Igbo, Pidgin, or English)!
+- NEVER cut off your sentence in the middle. Complete your full message before outputting the metadata tags.`;
+  }
+
+  const combinedInstructions = `${systemPrompt}${conversationHistoryContext}`;
+
   const currentParts: Array<Record<string, unknown>> = [];
   if (audioData?.base64) {
     currentParts.push({
@@ -248,45 +267,33 @@ async function callGeminiAI(
       text: "The patient has sent a photo of their medication, blister strip, medicine container, or doctor's prescription paper. Carefully read the text on the pack: identify the exact medication name (brand or generic), dosage/strength (e.g. 10mg, 500mg, 1g), and quantity if visible. Confirm what you see and help them arrange their refill.",
     });
   }
-  if (userMessage.trim() && userMessage !== '[Voice Note Message]' && userMessage !== '[Photo of medication blister pack or doctor prescription]') {
-    currentParts.push({ text: userMessage });
-  }
 
-  if (currentParts.length === 0) {
-    currentParts.push({ text: 'Hello, how can you help me?' });
-  }
+  const userQueryText = userMessage.trim() && userMessage !== '[Voice Note Message]' && userMessage !== '[Photo of medication blister pack or doctor prescription]'
+    ? userMessage
+    : 'Please assist me with my health or medication refill request.';
 
-  // 2. Retrieve recent conversation history for this patient (sliding window of last 4 turns)
-  const historyTurns: ChatTurn[] = phoneKey && userConversationHistory[phoneKey]
-    ? userConversationHistory[phoneKey].slice(-4)
-    : [];
-
-  const contents = [
-    ...historyTurns.map((turn) => ({
-      role: turn.role,
-      parts: turn.parts,
-    })),
-    {
-      role: 'user',
-      parts: currentParts,
-    },
-  ];
+  currentParts.push({
+    text: `System & Medical Instructions:\n${combinedInstructions}\n\nPatient's Current Message:\n"${userQueryText}"`,
+  });
 
   const body = {
-    systemInstruction: { parts: [{ text: systemPrompt }] },
-    contents,
+    contents: [
+      {
+        role: 'user',
+        parts: currentParts,
+      },
+    ],
     generationConfig: {
       temperature: 0.3,
       maxOutputTokens: 600,
     },
   };
 
-  // 3. Robust multi-model fallback chain (Active Google Gemini Models)
+  // 3. Robust multi-model fallback chain (Active Verified Google Gemini Models)
   const MODELS_TO_TRY = [
-    'gemini-2.0-flash',
     'gemini-1.5-flash',
-    'gemini-1.5-flash-latest',
-    'gemini-2.5-flash',
+    'gemini-2.0-flash-exp',
+    'gemini-1.5-flash-8b',
     'gemini-1.5-pro',
   ];
 
@@ -322,13 +329,117 @@ async function callGeminiAI(
 }
 
 function detectIntentKeywords(msg: string, preferredDialect?: string): string {
-  const lower = msg.toLowerCase();
-  const isHausa = preferredDialect === 'Hausa' || lower.includes('hawan jini') || lower.includes('ciwon suga') || lower.includes('magani') || lower.includes('sannu') || lower.includes('kare');
-  const isYoruba = preferredDialect === 'Yoruba' || lower.includes('eje riru') || lower.includes('atogbe') || lower.includes('oogun');
-  const isIgbo = preferredDialect === 'Igbo' || lower.includes('mgbali elu') || lower.includes('shuga') || lower.includes('ogwu');
+  const lower = msg.toLowerCase().trim();
+  const isHausa = preferredDialect === 'Hausa' || lower.includes('hawan jini') || lower.includes('ciwon suga') || lower.includes('magani') || lower.includes('sannu') || lower.includes('kare') || lower.includes('gida') || lower.includes('kawo') || lower.includes('karba') || lower.includes('eh') || lower.includes('toh') || lower.includes('nagode');
+  const isYoruba = preferredDialect === 'Yoruba' || lower.includes('eje riru') || lower.includes('atogbe') || lower.includes('oogun') || lower.includes('beeni') || lower.includes('ile') || lower.includes('e se');
+  const isIgbo = preferredDialect === 'Igbo' || lower.includes('mgbali elu') || lower.includes('shuga') || lower.includes('ogwu') || lower.includes('ulo') || lower.includes('dalu');
 
-  // Question or inquiry check ("do you have", "what of", "is there", "kuna da", "?")
-  const isInquiry = lower.includes('do you have') || lower.includes('what of') || lower.includes('is there') || lower.includes('kuna da') || lower.includes('nawa ne') || lower.includes('how much') || lower.includes('?');
+  // 1. AFFIRMATION / CONFIRMATION (Patient answering "Yes", "Okay", "Eh", "To", "Sure")
+  const isAffirmation =
+    lower === 'yes' ||
+    lower === 'yess' ||
+    lower === 'yeah' ||
+    lower === 'yup' ||
+    lower === 'e' ||
+    lower === 'eh' ||
+    lower === 'ee' ||
+    lower === 'to' ||
+    lower === 'toh' ||
+    lower === 'beeni' ||
+    lower === 'okay' ||
+    lower === 'ok' ||
+    lower === 'sure' ||
+    lower.startsWith('yes ') ||
+    lower.startsWith('okay ') ||
+    lower.startsWith('to ') ||
+    lower.startsWith('eh ');
+
+  if (isAffirmation) {
+    if (isHausa) {
+      return `To madalla! 💊 Mun karbi bukatarku. Kuna son a turo muku gida ne (don Allah ku turo adireshinku) ko kuma za ku zo ku karba a shagon magani?\nLANG: ha\nORDER_DETECTED: Refill Confirmation`;
+    }
+    if (isYoruba) {
+      return `O da pupo! 💊 A ti gba idahun yin. Se e fe ki a fi ranse si ile ni (e jowo e fi adiresi ranse) tabi e ma wa gba ni ile-ise oogun wa?\nLANG: yo\nORDER_DETECTED: Refill Confirmation`;
+    }
+    if (isIgbo) {
+      return `O di mma! 💊 Anyi anabatala nkwenye gi. O bu ka e ziteere gi ya n'ulo (biko zitere anyi adreesi gi) ka o bu na i ga-abia nata ya?\nLANG: ig\nORDER_DETECTED: Refill Confirmation`;
+    }
+    return `Awesome! 💊 We have received your confirmation. Would you like home delivery (please reply with your delivery address) or will you pick it up at the pharmacy counter?\nLANG: en\nORDER_DETECTED: Refill Confirmation`;
+  }
+
+  // 2. COUNTER PICKUP CONFIRMATION
+  if (
+    lower.includes('pick') ||
+    lower.includes('pickup') ||
+    lower.includes('karba') ||
+    lower.includes('shago') ||
+    lower.includes('zan zo') ||
+    lower.includes('counter') ||
+    lower.includes('store')
+  ) {
+    if (isHausa) {
+      return `🏪 Madalla! Za a ajiye muku maganinku a shagon magani. Da zarar kun iso, sai a mika muku nan take!\nLANG: ha\nORDER_DETECTED: Counter Pickup`;
+    }
+    if (isYoruba) {
+      return `🏪 O da! A ma toju oogun yin si ile-ise oogun wa. Te ba de be, e ma gba oogun yin lekun-unrere!\nLANG: yo\nORDER_DETECTED: Counter Pickup`;
+    }
+    return `🏪 Perfect! Your medication will be prepared and kept ready at the pharmacy counter for quick pickup.\nLANG: en\nORDER_DETECTED: Counter Pickup`;
+  }
+
+  // 3. HOME DELIVERY / ADDRESS
+  if (
+    lower.includes('deliver') ||
+    lower.includes('send to') ||
+    lower.includes('bring') ||
+    lower.includes('address') ||
+    lower.includes('gida') ||
+    lower.includes('kawo') ||
+    lower.includes('aiko') ||
+    lower.includes('barnawa') ||
+    lower.includes('gra') ||
+    lower.includes('sabon') ||
+    lower.includes('street') ||
+    lower.includes('road') ||
+    lower.includes('close') ||
+    lower.includes('estate')
+  ) {
+    if (isHausa) {
+      return `📍 Mun gane! Za a kawo muku maganinku har gida nan take. Masinjinmu zai kira ku kafin ya iso.\nLANG: ha\nORDER_DETECTED: Home delivery (${msg.trim()})`;
+    }
+    if (isYoruba) {
+      return `📍 A ti gba adiresi yin! A ma fi oogun ranse si ile fun yin laipe. Omo-ise wa ma pe yin.\nLANG: yo\nORDER_DETECTED: Home delivery (${msg.trim()})`;
+    }
+    return `📍 Got your delivery address! Our dispensary team is packaging your order right away and our dispatch rider will call you shortly.\nLANG: en\nORDER_DETECTED: Home delivery (${msg.trim()})`;
+  }
+
+  // 4. GRATITUDE (Thank you / Nagode)
+  if (
+    lower.includes('thank') ||
+    lower.includes('thanks') ||
+    lower.includes('nagode') ||
+    lower.includes('na gode') ||
+    lower.includes('e se') ||
+    lower.includes('dalu')
+  ) {
+    if (isHausa) {
+      return `Ba komai! Muna muku fatan koshin lafiya da samun sauki a koda yaushe. Idan kuna bukatar wani abu, ku sanar da mu kawai! 😊\nLANG: ha`;
+    }
+    if (isYoruba) {
+      return `Ko t'ope o! A gbadura pe ara yin a le dada. E ma pe wa te ba nilo nkan miiran! 😊\nLANG: yo`;
+    }
+    return `You're very welcome! Wishing you great health and quick recovery always. If you ever need advice or a refill, we're always right here for you! 😊\nLANG: en`;
+  }
+
+  // 5. INQUIRIES ("Do you have", "What of", "Kuna da", "?")
+  const isInquiry =
+    lower.includes('do you have') ||
+    lower.includes('what of') ||
+    lower.includes('is there') ||
+    lower.includes('kuna da') ||
+    lower.includes('nawa ne') ||
+    lower.includes('how much') ||
+    lower.includes('available') ||
+    lower.includes('?');
 
   if (isInquiry) {
     if (isHausa) {
@@ -343,22 +454,7 @@ function detectIntentKeywords(msg: string, preferredDialect?: string): string {
     return `Yes! 💊 We have that medication available in our pharmacy network. Would you like us to prepare a pack for home delivery or pharmacy pickup?\nLANG: en\nORDER_DETECTED: ${msg.trim()}`;
   }
 
-  // HAUSA KEYWORDS
-  if (isHausa) {
-    return `Sannu! 💊 Mun karbi bukatarku ta magani. Za a hada muku nan take. Kuna son a kawo muku gida ne ko za ku zo ku karba?\nLANG: ha\nORDER_DETECTED: ${msg.trim()}`;
-  }
-
-  // YORUBA KEYWORDS
-  if (isYoruba) {
-    return `E ku ojumo! 💊 A ti gba ibeere yin fun oogun. Se e fe ki a fi ranse si ile ni tabi e ma wa gba ni ile-ise oogun wa?\nLANG: yo\nORDER_DETECTED: ${msg.trim()}`;
-  }
-
-  // IGBO KEYWORDS
-  if (isIgbo) {
-    return `Nnoo! 💊 Anyi anatala aro gi maka ogwu. O bu ka e ziteere gi ya n'ulo ka o bu na i ga-abia n'onwe gi nata ya?\nLANG: ig\nORDER_DETECTED: ${msg.trim()}`;
-  }
-
-  // REFILL / MEDICATIONS (English / Pidgin)
+  // 6. GENERAL REFILL / MEDICATIONS (English / Pidgin / Hausa / Yoruba / Igbo)
   if (
     lower.includes('refill') ||
     lower.includes('finish') ||
@@ -371,6 +467,9 @@ function detectIntentKeywords(msg: string, preferredDialect?: string): string {
     lower.includes('capsule') ||
     lower.includes('medicine') ||
     lower.includes('medication') ||
+    lower.includes('magani') ||
+    lower.includes('oogun') ||
+    lower.includes('ogwu') ||
     lower.includes('amlodipine') ||
     lower.includes('metformin') ||
     lower.includes('lisinopril') ||
@@ -380,36 +479,39 @@ function detectIntentKeywords(msg: string, preferredDialect?: string): string {
     lower.includes('sugar') ||
     lower.includes('diabetes')
   ) {
+    if (isHausa) {
+      return `Sannu! 💊 Mun karbi bukatarku ta magani. Za a hada muku nan take. Kuna son a kawo muku gida ne ko za ku zo ku karba?\nLANG: ha\nORDER_DETECTED: ${msg.trim()}`;
+    }
     return `No wahala at all! 💊 We have received your refill request.\n\nWould you like home delivery or will you pick it up at the pharmacy?\nLANG: en\nORDER_DETECTED: ${msg.trim()}`;
   }
 
-  if (
-    lower.includes('deliver') ||
-    lower.includes('send to') ||
-    lower.includes('bring') ||
-    lower.includes('address') ||
-    lower.includes('barnawa') ||
-    lower.includes('gra') ||
-    lower.includes('sabon') ||
-    lower.includes('street') ||
-    lower.includes('road')
-  ) {
-    return `📍 Got your address! Our team will prepare your order and call you to confirm delivery soon.\nLANG: en\nORDER_DETECTED: delivery request`;
-  }
-
+  // 7. GREETINGS
   if (
     lower.includes('hi') ||
     lower.includes('hello') ||
+    lower.includes('sannu') ||
+    lower.includes('barkadi') ||
+    lower.includes('barka da') ||
+    lower.includes('ina kwana') ||
+    lower.includes('e ku') ||
+    lower.includes('kedu') ||
     lower.includes('good morning') ||
     lower.includes('good afternoon') ||
     lower.includes('good evening') ||
     lower.includes('how are') ||
     lower.includes('please')
   ) {
+    if (isHausa) {
+      return `Barka da warhaka! 👋 Muna nan don taimaka muku da magunguna, odar magani, da kawo gida. Yaya za mu taimaka muku a yau?\nLANG: ha`;
+    }
     return `👋 Hello! Welcome to RetainNG Health Concierge. How can we help you today? If your medication is running low, just let us know!\nLANG: en`;
   }
 
-  return `Hello! 👋 We are here to help with medication refills, delivery, and health queries in your preferred language or dialect. How can we assist you today?\nLANG: en`;
+  // 8. DEFAULT CULTURAL FALLBACK
+  if (isHausa) {
+    return `Sannu! 💊 Muna nan don taimaka muku da magunguna da odarku. Don Allah me kuke so a taimaka muku da shi yau?\nLANG: ha`;
+  }
+  return `Hello! 👋 We are here to help with medication refills, delivery, and health queries. How can we assist you today?\nLANG: en`;
 }
 
 async function handleManagerOrderAction(
