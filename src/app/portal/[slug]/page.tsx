@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { getBusinessBySlug, getCustomers, getSales, syncFleetFromCloud } from '@/lib/storage';
 import { Business, Customer, SaleOrVisit } from '@/types';
 import { QrCodeModal } from '@/components/QrCodeModal';
@@ -28,6 +28,7 @@ const BIZ_ICONS: Record<string, string> = {
 
 function PortalInner() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const slug = params?.slug as string;
 
   const [business, setBusiness] = useState<Business | null>(null);
@@ -44,23 +45,33 @@ function PortalInner() {
     setSales(getSales(bizId));
   }
 
+  // Handle URL query for direct print mode (?print=1 or ?print=true)
+  useEffect(() => {
+    const shouldPrint = searchParams.get('print') === '1' || searchParams.get('print') === 'true';
+    if (shouldPrint) {
+      setPrintMode(true);
+      setQrOpen(true);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     if (!slug) return;
-    // Initial fetch from local
+    // Initial fetch from local storage
     const biz = getBusinessBySlug(slug);
     if (biz) {
       setBusiness(biz);
       reloadData(biz.id);
+      setLoading(false);
     }
-    setLoading(false);
 
-    // Sync from authoritative cloud Supabase so multi-device actions reflect immediately
+    // Authoritative fetch from Supabase Cloud to resolve newly onboarded partners immediately
     syncFleetFromCloud().then(() => {
       const freshBiz = getBusinessBySlug(slug);
       if (freshBiz) {
         setBusiness(freshBiz);
         reloadData(freshBiz.id);
       }
+      setLoading(false);
     });
 
     const handleSync = () => {
@@ -69,6 +80,7 @@ function PortalInner() {
         setBusiness(freshBiz);
         reloadData(freshBiz.id);
       }
+      setLoading(false);
     };
     window.addEventListener('retainng_fleet_synced', handleSync);
     return () => window.removeEventListener('retainng_fleet_synced', handleSync);
@@ -325,6 +337,7 @@ function PortalInner() {
         isOpen={qrOpen}
         onClose={() => setQrOpen(false)}
         initialShowPrintCard={printMode}
+        business={business}
       />
     </div>
   );

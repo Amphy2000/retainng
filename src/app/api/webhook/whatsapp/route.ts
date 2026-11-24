@@ -521,6 +521,202 @@ async function handleManagerOrderAction(
   };
 }
 
+/** Handles 1-line merchant self-onboarding via WhatsApp */
+async function handleMerchantSelfOnboard(
+  cleanPhone: string,
+  rawMessage: string,
+  profileName: string,
+  host: string
+): Promise<{ success: boolean; message: string }> {
+  const trimmed = rawMessage.trim();
+  const upper = trimmed.toUpperCase();
+
+  // If user just sent command keyword without store details
+  if (
+    upper === 'JOIN' ||
+    upper === 'ONBOARD' ||
+    upper === 'REGISTER' ||
+    upper === 'PARTNER' ||
+    upper === 'HELP'
+  ) {
+    return {
+      success: true,
+      message:
+        `👋 *Welcome to RetainNG Partner Network!* 💊\n\n` +
+        `To activate automated WhatsApp refill reminders & customer retention for your pharmacy in 5 seconds, reply with:\n\n` +
+        `👉 *JOIN [Pharmacy Name] [City]*\n\n` +
+        `*Examples:*\n` +
+        `• \`JOIN Danfodio Pharmacy Kaduna\`\n` +
+        `• \`JOIN MedPlus Pharmacy Lekki\`\n` +
+        `• \`JOIN St. Luke Pharmacy Abuja\`\n\n` +
+        `Our system will immediately generate your private store portal, manager order routing, and 4-in-1 printable counter bag slips! 🚀`,
+    };
+  }
+
+  // Extract raw business name & location
+  const cleanInput = trimmed
+    .replace(/^(JOIN|ONBOARD|REGISTER|PARTNER)\s+/i, '')
+    .trim();
+
+  if (!cleanInput) {
+    return {
+      success: false,
+      message: `Please specify your pharmacy name. Example: *JOIN Danfodio Pharmacy Kaduna*`,
+    };
+  }
+
+  // Detect city from string if present
+  const NIGERIAN_CITIES = [
+    'Kaduna', 'Lagos', 'Abuja', 'Kano', 'Ibadan', 'Port Harcourt', 'Enugu',
+    'Benin', 'Zaria', 'Jos', 'Ilorin', 'Abeokuta', 'Onitsha', 'Warri', 'Calabar',
+    'Uyo', 'Owerri', 'Akure', 'Lekki', 'Ikeja', 'Yaba', 'Victoria Island'
+  ];
+
+  let detectedCity = 'Kaduna';
+  let detectedState = 'Kaduna';
+
+  for (const city of NIGERIAN_CITIES) {
+    const regex = new RegExp(`\\b${city}\\b`, 'i');
+    if (regex.test(cleanInput)) {
+      detectedCity = city;
+      detectedState = ['Lagos', 'Ikeja', 'Lekki', 'Yaba'].includes(city)
+        ? 'Lagos'
+        : ['Abuja'].includes(city)
+        ? 'FCT'
+        : ['Kano'].includes(city)
+        ? 'Kano'
+        : ['Zaria', 'Kaduna'].includes(city)
+        ? 'Kaduna'
+        : city;
+      break;
+    }
+  }
+
+  // Clean Store Display Name (Capitalize Each Word)
+  const formattedName = cleanInput
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+
+  // Generate URL slug
+  let slug = cleanInput
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (!slug) slug = `pharmacy-${cleanPhone.slice(-4)}`;
+
+  let storeId = crypto.randomUUID ? crypto.randomUUID() : `biz_${Date.now()}`;
+  let isExisting = false;
+
+  if (supabaseAdmin) {
+    try {
+      // Check if business already exists by phone or slug
+      const { data: existing } = await supabaseAdmin
+        .from('businesses')
+        .select('*')
+        .or(`opt_in_slug.eq.${slug},manager_alert_phone.eq.${cleanPhone},phone.eq.+${cleanPhone}`)
+        .maybeSingle();
+
+      if (existing) {
+        storeId = existing.id;
+        slug = existing.opt_in_slug;
+        isExisting = true;
+      } else {
+        // Create new business record
+        const insertPayload = {
+          id: storeId,
+          name: formattedName,
+          business_type: 'pharmacy',
+          phone: `+${cleanPhone}`,
+          manager_alert_phone: cleanPhone,
+          concierge_phone: '+234 703 267 3310',
+          address: `${detectedCity}, Nigeria`,
+          city: detectedCity,
+          state: detectedState,
+          currency: 'NGN',
+          timezone: 'Africa/Lagos',
+          opt_in_slug: slug,
+          is_demo: false,
+          subscription_status: '14-Day Free Pilot',
+          monthly_retainer_ngn: 25000,
+        };
+
+        const { error: createErr } = await supabaseAdmin
+          .from('businesses')
+          .insert(insertPayload);
+
+        if (createErr) {
+          console.warn('Full insert failed, falling back to core columns:', createErr);
+          const fallbackPayload = {
+            id: storeId,
+            name: formattedName,
+            business_type: 'pharmacy',
+            phone: `+${cleanPhone}`,
+            manager_alert_phone: cleanPhone,
+            concierge_phone: '+234 703 267 3310',
+            address: `${detectedCity}, Nigeria`,
+            city: detectedCity,
+            state: detectedState,
+            currency: 'NGN',
+            timezone: 'Africa/Lagos',
+            opt_in_slug: slug,
+            is_demo: false,
+          };
+          await supabaseAdmin.from('businesses').insert(fallbackPayload);
+        }
+      }
+
+      // Log activation into sales_or_visits for Agency Radar Live Feed
+      await supabaseAdmin.from('sales_or_visits').insert({
+        business_id: storeId,
+        customer_name: profileName || formattedName,
+        customer_phone: `+${cleanPhone}`,
+        service_or_product: isExisting
+          ? 'Partner Portal & Slips Retrieved'
+          : 'New Partner Store Auto-Onboarded via WhatsApp',
+        amount_ngn: 25000,
+        notes: `Store "${formattedName}" (${detectedCity}) ${
+          isExisting ? 'retrieved portal link' : 'self-registered autonomously'
+        } from WhatsApp number +${cleanPhone}. Slug: ${slug}`,
+        is_manual_entry: false,
+      });
+    } catch (e) {
+      console.error('Merchant self-onboard Supabase error:', e);
+    }
+  }
+
+  const protocol = host.includes('localhost') ? 'http' : 'https';
+  const portalUrl = `${protocol}://${host}/portal/${slug}`;
+  const slipsUrl = `${protocol}://${host}/portal/${slug}?print=1`;
+  const optInUrl = `${protocol}://${host}/opt-in/${slug}`;
+
+  const greetingTitle = isExisting
+    ? `✅ *WELCOME BACK — ${formattedName.toUpperCase()}!*`
+    : `🎉 *CONGRATULATIONS! ${formattedName.toUpperCase()} IS NOW LIVE ON RETAINNG!* 💊`;
+
+  return {
+    success: true,
+    message:
+      `${greetingTitle}\n\n` +
+      `Your store's WhatsApp AI customer retention autopilot is active.\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `📱 *Your Private Store Portal:*\n` +
+      `${portalUrl}\n` +
+      `_(View registered patients, 28-day countdown timers & retained revenue)_\n\n` +
+      `🖨️ *Print Your 4-in-1 Counter Bag Slips:*\n` +
+      `${slipsUrl}\n` +
+      `_(Print 20 slips & drop them in customer bags at dispensing)_\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `💡 *How It Works in 3 Steps:*\n` +
+      `1. Your cashier drops a VIP Refill slip in patient bags.\n` +
+      `2. Patients scan with WhatsApp — our AI concierge speaks Hausa, Yoruba, Igbo & English to track their refill date.\n` +
+      `3. When their pills finish, the AI alerts *this WhatsApp number* with 1-Tap Ready/Dispatch!\n\n` +
+      `🔗 *Direct Patient Opt-in Link:*\n` +
+      `${optInUrl}`,
+  };
+}
+
 export async function POST(req: NextRequest) {
   const host = req.headers.get('host') || 'retainng.vercel.app';
   try {
@@ -658,9 +854,46 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // --- 0.1 CHECK FOR MERCHANT SELF-ONBOARDING COMMAND ---
+    if (
+      upperMsg.startsWith('JOIN') ||
+      upperMsg.startsWith('ONBOARD') ||
+      upperMsg.startsWith('REGISTER') ||
+      upperMsg.startsWith('PARTNER')
+    ) {
+      const onboardRes = await handleMerchantSelfOnboard(cleanPhone, messageBody.trim(), profileName, host);
+      await sendWhatsApp(cleanPhone, onboardRes.message);
+      return NextResponse.json({
+        success: onboardRes.success,
+        intent: 'merchant_self_onboard',
+        message: onboardRes.message,
+      });
+    }
+
     // --- Multi-Business attribution resolution ---
     const refMatch = messageBody.match(/\[ref:([a-zA-Z0-9_-]+)\]/i);
-    const resolvedBiz = resolveBusiness(refMatch ? refMatch[1] : messageBody);
+    let resolvedBiz = resolveBusiness(refMatch ? refMatch[1] : messageBody);
+
+    // If not found in static list, check dynamic Supabase businesses
+    if (!resolvedBiz && refMatch && supabaseAdmin) {
+      try {
+        const { data: b } = await supabaseAdmin
+          .from('businesses')
+          .select('opt_in_slug, name, business_type, city')
+          .eq('opt_in_slug', refMatch[1].toLowerCase())
+          .maybeSingle();
+        if (b) {
+          resolvedBiz = {
+            slug: b.opt_in_slug,
+            name: b.name,
+            type: b.business_type || 'pharmacy',
+            location: b.city || 'Kaduna',
+          };
+        }
+      } catch (err) {
+        console.warn('Dynamic business lookup error:', err);
+      }
+    }
     const activeSlug = resolvedBiz?.slug || (refMatch ? refMatch[1] : 'general');
     const activeBizName = resolvedBiz?.name || (refMatch ? refMatch[1] : null);
 

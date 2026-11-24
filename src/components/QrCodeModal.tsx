@@ -11,9 +11,10 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   initialShowPrintCard?: boolean;
+  business?: Business | null;
 }
 
-export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: Props) {
+export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, business: propBusiness }: Props) {
   const [business, setBusiness] = useState<Business | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
@@ -95,7 +96,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false }: P
     if (!isOpen) return;
     const timer = setTimeout(() => {
       setShowPrintCard(initialShowPrintCard);
-      const biz = getActiveBusiness();
+      const biz = propBusiness || getActiveBusiness();
       setBusiness(biz);
 
       if (!biz) return; // Guard: no active business yet

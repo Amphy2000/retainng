@@ -15,6 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabaseClient';
 
 // In-memory store (server process lifetime)
 // In production: replace with Supabase DB query
@@ -38,11 +39,34 @@ export async function GET(req: NextRequest) {
   }
 
   const config = pharmacyConfig[slug];
-  if (!config) {
-    return NextResponse.json({ found: false, slug }, { status: 404 });
+  if (config) {
+    return NextResponse.json({ found: true, slug, ...config });
   }
 
-  return NextResponse.json({ found: true, slug, ...config });
+  // Authoritative Supabase Lookup
+  if (supabaseAdmin) {
+    try {
+      const { data: b } = await supabaseAdmin
+        .from('businesses')
+        .select('*')
+        .eq('opt_in_slug', slug)
+        .maybeSingle();
+
+      if (b) {
+        return NextResponse.json({
+          found: true,
+          slug,
+          pharmacyName: b.name,
+          managerPhone: b.manager_alert_phone || b.phone || '',
+          conciergePhone: b.concierge_phone || '+234 703 267 3310',
+        });
+      }
+    } catch (e) {
+      console.warn('pharmacy-config Supabase lookup error:', e);
+    }
+  }
+
+  return NextResponse.json({ found: false, slug }, { status: 404 });
 }
 
 /** POST /api/pharmacy-config — Settings page calls this on Save Profile */
