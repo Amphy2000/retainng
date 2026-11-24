@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
 /**
@@ -606,7 +607,7 @@ async function handleMerchantSelfOnboard(
 
   if (!slug) slug = `pharmacy-${cleanPhone.slice(-4)}`;
 
-  let storeId = crypto.randomUUID ? crypto.randomUUID() : `biz_${Date.now()}`;
+  let storeId = randomUUID();
   let isExisting = false;
 
   if (supabaseAdmin) {
@@ -1271,7 +1272,14 @@ LANG: [ha | yo | ig | ar | en]`;
     });
   } catch (err: unknown) {
     console.error('WhatsApp webhook error:', err);
-    return NextResponse.json({ error: 'Webhook processing error' }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'Webhook processing error',
+        details: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      },
+      { status: 500 }
+    );
   }
 }
 
