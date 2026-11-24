@@ -28,7 +28,10 @@ import {
   Activity,
   Calendar,
   Check,
+  ChevronLeft,
   ChevronRight,
+  Search,
+  Filter,
   Info,
   HelpCircle,
 } from 'lucide-react';
@@ -72,8 +75,12 @@ export default function AgencyRadarPage() {
   const [nudgingId, setNudgingId] = useState<string | null>(null);
   const [nudgeFeedback, setNudgeFeedback] = useState<string | null>(null);
 
-  // Filter for Bot Events
-  const [eventFilter, setEventFilter] = useState<'all' | 'refills' | 'dispatch' | 'optin'>('all');
+  // Filter & Search Controls for Live Activity Stream
+  const [eventFilter, setEventFilter] = useState<'all' | 'refill' | 'dispatch' | 'optin' | 'test'>('all');
+  const [eventSearchQuery, setEventSearchQuery] = useState('');
+  const [eventTimeFilter, setEventTimeFilter] = useState<'all' | 'today' | '7days'>('all');
+  const [eventPage, setEventPage] = useState(1);
+  const [eventsPerPage, setEventsPerPage] = useState(6);
 
   useEffect(() => {
     const handleSync = () => setSyncVersion((v) => v + 1);
@@ -238,14 +245,57 @@ export default function AgencyRadarPage() {
     return events.sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
   }, [mounted, allBusinesses, selectedBiz]);
 
-  // Filtered Events
+  // Category Live Counts
+  const eventCounts = useMemo(() => {
+    return {
+      all: realBotEvents.length,
+      refill: realBotEvents.filter((e) => e.type === 'refill').length,
+      dispatch: realBotEvents.filter((e) => e.type === 'dispatch').length,
+      optin: realBotEvents.filter((e) => e.type === 'optin').length,
+      test: realBotEvents.filter((e) => e.type === 'test').length,
+    };
+  }, [realBotEvents]);
+
+  // Filtered Events with Search and Time Range
   const filteredEvents = useMemo(() => {
-    if (eventFilter === 'all') return realBotEvents;
-    if (eventFilter === 'refills') return realBotEvents.filter((e) => e.type === 'refill');
-    if (eventFilter === 'dispatch') return realBotEvents.filter((e) => e.type === 'dispatch');
-    if (eventFilter === 'optin') return realBotEvents.filter((e) => e.type === 'optin');
-    return realBotEvents;
-  }, [realBotEvents, eventFilter]);
+    let result = realBotEvents;
+
+    // 1. Type Filter
+    if (eventFilter !== 'all') {
+      result = result.filter((e) => e.type === eventFilter);
+    }
+
+    // 2. Time Range Filter
+    if (eventTimeFilter === 'today') {
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      result = result.filter((e) => new Date(e.rawDate).getTime() >= startOfToday);
+    } else if (eventTimeFilter === '7days') {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      result = result.filter((e) => new Date(e.rawDate).getTime() >= sevenDaysAgo);
+    }
+
+    // 3. Search Query
+    if (eventSearchQuery.trim()) {
+      const q = eventSearchQuery.toLowerCase().trim();
+      result = result.filter(
+        (e) =>
+          e.title.toLowerCase().includes(q) ||
+          e.recipient.toLowerCase().includes(q) ||
+          e.detail.toLowerCase().includes(q) ||
+          e.businessName.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [realBotEvents, eventFilter, eventTimeFilter, eventSearchQuery]);
+
+  // Paginated Slicing
+  const totalEventPages = Math.ceil(filteredEvents.length / eventsPerPage) || 1;
+  const paginatedEvents = useMemo(() => {
+    const start = (eventPage - 1) * eventsPerPage;
+    return filteredEvents.slice(start, start + eventsPerPage);
+  }, [filteredEvents, eventPage, eventsPerPage]);
 
   // Trigger automated Cron scan
   async function handleRunRefillScan() {
@@ -553,9 +603,10 @@ export default function AgencyRadarPage() {
 
 
 
-          {/* Real Live Action Stream Feed */}
+          {/* Real Live Action Stream Feed (Contained & Filterable) */}
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {/* Header: Title + Instant Search */}
+            <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div>
                 <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
                   <span>Live Bot Activity &amp; Dispatch Stream</span>
@@ -566,54 +617,172 @@ export default function AgencyRadarPage() {
                 </p>
               </div>
 
-              {/* Event filter pills */}
-              <div className="flex items-center gap-1 text-xs">
-                <button
-                  onClick={() => setEventFilter('all')}
-                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
-                    eventFilter === 'all' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
-                  }`}
-                >
-                  All ({realBotEvents.length})
-                </button>
-                <button
-                  onClick={() => setEventFilter('dispatch')}
-                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
-                    eventFilter === 'dispatch' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
-                  }`}
-                >
-                  Manager Dispatch
-                </button>
-                <button
-                  onClick={() => setEventFilter('optin')}
-                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer ${
-                    eventFilter === 'optin' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
-                  }`}
-                >
-                  QR Scans
-                </button>
+              {/* Instant Search Bar */}
+              <div className="relative shrink-0">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search phone, name, drug..."
+                  value={eventSearchQuery}
+                  onChange={(e) => {
+                    setEventSearchQuery(e.target.value);
+                    setEventPage(1);
+                  }}
+                  className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full sm:w-64"
+                />
+                {eventSearchQuery && (
+                  <button
+                    onClick={() => {
+                      setEventSearchQuery('');
+                      setEventPage(1);
+                    }}
+                    className="absolute right-2.5 top-2 text-[10px] text-slate-400 hover:text-slate-600 font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             </div>
 
+            {/* Sub-header: Category Pills & Time Filters */}
+            <div className="px-5 py-3 bg-slate-50/70 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+              {/* Category Pills */}
+              <div className="flex flex-wrap items-center gap-1">
+                <button
+                  onClick={() => {
+                    setEventFilter('all');
+                    setEventPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer transition ${
+                    eventFilter === 'all'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-200/70'
+                  }`}
+                >
+                  All ({eventCounts.all})
+                </button>
+                <button
+                  onClick={() => {
+                    setEventFilter('refill');
+                    setEventPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer transition flex items-center gap-1 ${
+                    eventFilter === 'refill'
+                      ? 'bg-blue-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-200/70'
+                  }`}
+                >
+                  <span>Refills</span>
+                  <span className="text-[10px] opacity-80">({eventCounts.refill})</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setEventFilter('dispatch');
+                    setEventPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer transition flex items-center gap-1 ${
+                    eventFilter === 'dispatch'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-200/70'
+                  }`}
+                >
+                  <span>Manager Dispatch</span>
+                  <span className="text-[10px] opacity-80">({eventCounts.dispatch})</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setEventFilter('optin');
+                    setEventPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer transition flex items-center gap-1 ${
+                    eventFilter === 'optin'
+                      ? 'bg-purple-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-200/70'
+                  }`}
+                >
+                  <span>QR Scans</span>
+                  <span className="text-[10px] opacity-80">({eventCounts.optin})</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setEventFilter('test');
+                    setEventPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg font-bold cursor-pointer transition flex items-center gap-1 ${
+                    eventFilter === 'test'
+                      ? 'bg-cyan-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-200/70'
+                  }`}
+                >
+                  <span>Bot Transmissions</span>
+                  <span className="text-[10px] opacity-80">({eventCounts.test})</span>
+                </button>
+              </div>
+
+              {/* Time Range & View Controls */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={eventTimeFilter}
+                  onChange={(e) => {
+                    setEventTimeFilter(e.target.value as 'all' | 'today' | '7days');
+                    setEventPage(1);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold focus:outline-none cursor-pointer"
+                >
+                  <option value="all">📅 All Time History</option>
+                  <option value="today">⚡ Today Only</option>
+                  <option value="7days">🗓️ Past 7 Days</option>
+                </select>
+
+                <select
+                  value={eventsPerPage}
+                  onChange={(e) => {
+                    setEventsPerPage(Number(e.target.value));
+                    setEventPage(1);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold focus:outline-none cursor-pointer"
+                >
+                  <option value={6}>6 per page</option>
+                  <option value={12}>12 per page</option>
+                  <option value={25}>25 per page</option>
+                  <option value={100}>All</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Event List (Contained Scroll Window) */}
             {filteredEvents.length === 0 ? (
               <div className="p-10 text-center space-y-2">
                 <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
                   <Bot className="w-6 h-6 text-slate-400" />
                 </div>
-                <h4 className="text-sm font-bold text-slate-800">No Bot Events Logged Yet</h4>
+                <h4 className="text-sm font-bold text-slate-800">
+                  {eventSearchQuery || eventFilter !== 'all' || eventTimeFilter !== 'all'
+                    ? 'No events match your current filter'
+                    : 'No Bot Events Logged Yet'}
+                </h4>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  As patients scan bag slips, or when you test-send a WhatsApp message using the button above, real database logs will stream here live.
+                  {eventSearchQuery || eventFilter !== 'all' || eventTimeFilter !== 'all'
+                    ? 'Try adjusting your search query, selecting "All", or changing the time range.'
+                    : 'As patients scan bag slips, or when you test-send a WhatsApp message using the button above, real database logs will stream here live.'}
                 </p>
-                <button
-                  onClick={() => setTestModalOpen(true)}
-                  className="mt-2 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl"
-                >
-                  Dispatch Test WhatsApp Message Now
-                </button>
+                {(eventSearchQuery || eventFilter !== 'all' || eventTimeFilter !== 'all') && (
+                  <button
+                    onClick={() => {
+                      setEventSearchQuery('');
+                      setEventFilter('all');
+                      setEventTimeFilter('all');
+                      setEventPage(1);
+                    }}
+                    className="mt-2 px-3.5 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                )}
               </div>
             ) : (
-              <div className="divide-y divide-slate-100">
-                {filteredEvents.map((evt) => (
+              <div className="max-h-[540px] overflow-y-auto divide-y divide-slate-100">
+                {paginatedEvents.map((evt) => (
                   <div key={evt.id} className="p-4 sm:p-5 hover:bg-slate-50/80 transition flex items-start gap-4">
                     <div className="w-10 h-10 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 shadow-2xs">
                       {evt.type === 'dispatch' ? (
@@ -651,12 +820,47 @@ export default function AgencyRadarPage() {
               </div>
             )}
 
-            <div className="p-4 bg-slate-50/60 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            {/* Pagination & Audit Stream Footer */}
+            <div className="p-4 bg-slate-50/70 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500">
               <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>100% Real Database Audit Stream • GreenAPI Synced</span>
               </span>
-              <span className="font-bold text-slate-700">{filteredEvents.length} real events</span>
+
+              <div className="flex items-center gap-3 self-end sm:self-auto">
+                <span className="text-slate-500 font-medium">
+                  Showing{' '}
+                  <strong className="text-slate-700 font-bold">
+                    {filteredEvents.length === 0 ? 0 : (eventPage - 1) * eventsPerPage + 1}–
+                    {Math.min(eventPage * eventsPerPage, filteredEvents.length)}
+                  </strong>{' '}
+                  of <strong className="text-slate-700 font-bold">{filteredEvents.length}</strong> events
+                </span>
+
+                {totalEventPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      disabled={eventPage <= 1}
+                      onClick={() => setEventPage((p) => Math.max(1, p - 1))}
+                      className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      title="Previous Page"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5 text-slate-700" />
+                    </button>
+                    <span className="px-2 font-bold text-slate-700 text-xs">
+                      {eventPage} / {totalEventPages}
+                    </span>
+                    <button
+                      disabled={eventPage >= totalEventPages}
+                      onClick={() => setEventPage((p) => Math.min(totalEventPages, p + 1))}
+                      className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      title="Next Page"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
