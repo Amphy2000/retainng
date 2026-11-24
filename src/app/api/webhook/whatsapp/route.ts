@@ -197,106 +197,164 @@ async function sendWhatsAppVoice(toPhone: string, audioUrl: string): Promise<voi
   }
 }
 
+interface ChatTurn {
+  role: 'user' | 'model';
+  parts: Array<{ text: string }>;
+}
+
+// In-memory sliding window of conversation history per phone number (last 6 turns)
+const userConversationHistory: Record<string, ChatTurn[]> = {};
+
 async function callGeminiAI(
   systemPrompt: string,
   userMessage: string,
   audioData?: { base64: string; mimeType: string },
-  imageData?: { base64: string; mimeType: string }
+  imageData?: { base64: string; mimeType: string },
+  phoneKey?: string,
+  rememberedDialect?: string
 ): Promise<string> {
   const geminiApiKey = process.env.GEMINI_API_KEY || '';
 
   if (!geminiApiKey) {
-    return detectIntentKeywords(userMessage);
+    console.warn('GEMINI_API_KEY not configured, falling back to intent detection');
+    return detectIntentKeywords(userMessage, rememberedDialect);
   }
 
-  const parts: Array<Record<string, unknown>> = [];
+  // 1. Clean audio & image MIME types (e.g. remove '; codecs=opus' which Google rejects with 400)
+  let cleanAudioMime = audioData?.mimeType ? audioData.mimeType.split(';')[0].trim() : 'audio/ogg';
+  if (cleanAudioMime === 'audio/opus') cleanAudioMime = 'audio/ogg';
+  const cleanImageMime = imageData?.mimeType ? imageData.mimeType.split(';')[0].trim() : 'image/jpeg';
+
+  const currentParts: Array<Record<string, unknown>> = [];
   if (audioData?.base64) {
-    parts.push({
-      inline_data: {
-        mime_type: audioData.mimeType,
+    currentParts.push({
+      inlineData: {
+        mimeType: cleanAudioMime,
         data: audioData.base64,
       },
     });
+    currentParts.push({
+      text: 'Listen carefully to this audio voice note message. The patient is speaking in their native language or local Nigerian dialect (Hausa, Yoruba, Igbo, Nigerian Pidgin, English, or Arabic). Understand their health or refill need and respond in that exact dialect.',
+    });
   }
   if (imageData?.base64) {
-    parts.push({
-      inline_data: {
-        mime_type: imageData.mimeType,
+    currentParts.push({
+      inlineData: {
+        mimeType: cleanImageMime,
         data: imageData.base64,
       },
     });
-    parts.push({
+    currentParts.push({
       text: "The patient has sent a photo of their medication, blister strip, medicine container, or doctor's prescription paper. Carefully read the text on the pack: identify the exact medication name (brand or generic), dosage/strength (e.g. 10mg, 500mg, 1g), and quantity if visible. Confirm what you see and help them arrange their refill.",
     });
   }
-  if (userMessage.trim()) {
-    parts.push({ text: userMessage });
-  } else if (audioData?.base64) {
-    parts.push({
-      text: 'Listen carefully to this voice note message. The patient is speaking in their native language or local Nigerian dialect (Hausa, Yoruba, Igbo, Nigerian Pidgin, English, or Arabic). Understand their health or refill need and respond in that exact dialect.',
-    });
+  if (userMessage.trim() && userMessage !== '[Voice Note Message]' && userMessage !== '[Photo of medication blister pack or doctor prescription]') {
+    currentParts.push({ text: userMessage });
   }
+
+  if (currentParts.length === 0) {
+    currentParts.push({ text: 'Hello, how can you help me?' });
+  }
+
+  // 2. Retrieve recent conversation history for this patient (sliding window of last 4 turns)
+  const historyTurns: ChatTurn[] = phoneKey && userConversationHistory[phoneKey]
+    ? userConversationHistory[phoneKey].slice(-4)
+    : [];
+
+  const contents = [
+    ...historyTurns.map((turn) => ({
+      role: turn.role,
+      parts: turn.parts,
+    })),
+    {
+      role: 'user',
+      parts: currentParts,
+    },
+  ];
 
   const body = {
-    system_instruction: { parts: [{ text: systemPrompt }] },
-    contents: [{ role: 'user', parts }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents,
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 600,
+    },
   };
 
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+  // 3. Robust multi-model fallback chain (Active Google Gemini Models)
+  const MODELS_TO_TRY = [
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-latest',
+    'gemini-2.5-flash',
+    'gemini-1.5-pro',
+  ];
+
+  for (const model of MODELS_TO_TRY) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }
+      );
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn(`Gemini model ${model} returned status ${res.status}:`, errText.slice(0, 180));
+        continue; // Try next model in chain
       }
-    );
-    const data = await res.json();
-    return (
-      data?.candidates?.[0]?.content?.parts?.[0]?.text || detectIntentKeywords(userMessage)
-    );
-  } catch (err) {
-    console.error('Gemini API call error:', err);
-    return detectIntentKeywords(userMessage);
+
+      const data = await res.json();
+      const replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (replyText && replyText.trim()) {
+        return replyText.trim();
+      }
+    } catch (err) {
+      console.warn(`Gemini model ${model} fetch exception:`, err);
+    }
   }
+
+  console.error('All Gemini models exhausted or failed, falling back to contextual keywords');
+  return detectIntentKeywords(userMessage, rememberedDialect);
 }
 
-function detectIntentKeywords(msg: string): string {
+function detectIntentKeywords(msg: string, preferredDialect?: string): string {
   const lower = msg.toLowerCase();
-  
+  const isHausa = preferredDialect === 'Hausa' || lower.includes('hawan jini') || lower.includes('ciwon suga') || lower.includes('magani') || lower.includes('sannu') || lower.includes('kare');
+  const isYoruba = preferredDialect === 'Yoruba' || lower.includes('eje riru') || lower.includes('atogbe') || lower.includes('oogun');
+  const isIgbo = preferredDialect === 'Igbo' || lower.includes('mgbali elu') || lower.includes('shuga') || lower.includes('ogwu');
+
+  // Question or inquiry check ("do you have", "what of", "is there", "kuna da", "?")
+  const isInquiry = lower.includes('do you have') || lower.includes('what of') || lower.includes('is there') || lower.includes('kuna da') || lower.includes('nawa ne') || lower.includes('how much') || lower.includes('?');
+
+  if (isInquiry) {
+    if (isHausa) {
+      return `Sannu! 💊 E, muna da wannan maganin a shagon maganinmu. Kuna son a kawo muku gida ne ko za ku zo ku karba?\nLANG: ha\nORDER_DETECTED: ${msg.trim()}`;
+    }
+    if (isYoruba) {
+      return `E ku ojumo! 💊 Beeni, a ni oogun yii ni ile-ise oogun wa. Se e fe ki a fi ranse si ile ni tabi e ma wa gba?\nLANG: yo\nORDER_DETECTED: ${msg.trim()}`;
+    }
+    if (isIgbo) {
+      return `Nnoo! 💊 Ee, anyi nwere ogwu a n'ulo ogwu anyi. O bu ka e ziteere gi ya n'ulo ka o bu na i ga-abia n'onwe gi nata ya?\nLANG: ig\nORDER_DETECTED: ${msg.trim()}`;
+    }
+    return `Yes! 💊 We have that medication available in our pharmacy network. Would you like us to prepare a pack for home delivery or pharmacy pickup?\nLANG: en\nORDER_DETECTED: ${msg.trim()}`;
+  }
+
   // HAUSA KEYWORDS
-  if (
-    lower.includes('hawan jini') ||
-    lower.includes('ciwon suga') ||
-    lower.includes('zazzabi') ||
-    lower.includes('magani') ||
-    lower.includes('ya kare') ||
-    lower.includes('kare') ||
-    lower.includes('aiko')
-  ) {
+  if (isHausa) {
     return `Sannu! 💊 Mun karbi bukatarku ta magani. Za a hada muku nan take. Kuna son a kawo muku gida ne ko za ku zo ku karba?\nLANG: ha\nORDER_DETECTED: ${msg.trim()}`;
   }
 
   // YORUBA KEYWORDS
-  if (
-    lower.includes('eje riru') ||
-    lower.includes('atogbe') ||
-    lower.includes('oogun') ||
-    lower.includes('ti tan') ||
-    lower.includes('fi ranse')
-  ) {
+  if (isYoruba) {
     return `E ku ojumo! 💊 A ti gba ibeere yin fun oogun. Se e fe ki a fi ranse si ile ni tabi e ma wa gba ni ile-ise oogun wa?\nLANG: yo\nORDER_DETECTED: ${msg.trim()}`;
   }
 
   // IGBO KEYWORDS
-  if (
-    lower.includes('mgbali elu') ||
-    lower.includes('shuga') ||
-    lower.includes('ogwu') ||
-    lower.includes('agwula') ||
-    lower.includes('zitere')
-  ) {
+  if (isIgbo) {
     return `Nnoo! 💊 Anyi anatala aro gi maka ogwu. O bu ka e ziteere gi ya n'ulo ka o bu na i ga-abia n'onwe gi nata ya?\nLANG: ig\nORDER_DETECTED: ${msg.trim()}`;
   }
 
@@ -311,7 +369,6 @@ function detectIntentKeywords(msg: string): string {
     lower.includes('drugs') ||
     lower.includes('tablet') ||
     lower.includes('capsule') ||
-    lower.includes('injection') ||
     lower.includes('medicine') ||
     lower.includes('medication') ||
     lower.includes('amlodipine') ||
@@ -325,6 +382,7 @@ function detectIntentKeywords(msg: string): string {
   ) {
     return `No wahala at all! 💊 We have received your refill request.\n\nWould you like home delivery or will you pick it up at the pharmacy?\nLANG: en\nORDER_DETECTED: ${msg.trim()}`;
   }
+
   if (
     lower.includes('deliver') ||
     lower.includes('send to') ||
@@ -338,21 +396,7 @@ function detectIntentKeywords(msg: string): string {
   ) {
     return `📍 Got your address! Our team will prepare your order and call you to confirm delivery soon.\nLANG: en\nORDER_DETECTED: delivery request`;
   }
-  if (
-    lower.includes('dosage') ||
-    lower.includes('dose') ||
-    lower.includes('side effect') ||
-    lower.includes('interact') ||
-    lower.includes('safe') ||
-    lower.includes('pregnant') ||
-    lower.includes('child') ||
-    lower.includes('warning') ||
-    lower.includes('pharmacist') ||
-    lower.includes('question') ||
-    lower.includes('?')
-  ) {
-    return `That is a great question! 🩺 For accurate clinical advice, please speak with our pharmacist directly. You can also call or visit us during opening hours.\nLANG: en`;
-  }
+
   if (
     lower.includes('hi') ||
     lower.includes('hello') ||
@@ -364,6 +408,7 @@ function detectIntentKeywords(msg: string): string {
   ) {
     return `👋 Hello! Welcome to RetainNG Health Concierge. How can we help you today? If your medication is running low, just let us know!\nLANG: en`;
   }
+
   return `Hello! 👋 We are here to help with medication refills, delivery, and health queries in your preferred language or dialect. How can we assist you today?\nLANG: en`;
 }
 
@@ -858,11 +903,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ignored: 'self-message' });
     }
 
-    if (!messageBody.trim() && !audioData && !imageData) {
+    if (!messageBody.trim() && !audioData && !imageData && !isVoiceInput) {
       return NextResponse.json({ ignored: 'empty-message' });
     }
 
-    if (!messageBody.trim() && audioData) {
+    if (!messageBody.trim() && (audioData || isVoiceInput)) {
       messageBody = '[Voice Note Message]';
     }
 
@@ -1095,7 +1140,14 @@ LANG: [ha | yo | ig | ar | en]`;
     let detectedLang = 'en';
 
     try {
-      const rawAiReply = await callGeminiAI(systemPrompt, messageBody, audioData, imageData);
+      const rawAiReply = await callGeminiAI(
+        systemPrompt,
+        messageBody,
+        audioData,
+        imageData,
+        cleanPhone,
+        rememberedLang
+      );
 
       if (rawAiReply.includes('LANG:')) {
         const langMatch = rawAiReply.match(/LANG:\s*([a-z]{2})/i);
@@ -1119,13 +1171,28 @@ LANG: [ha | yo | ig | ar | en]`;
       } else {
         aiReply = rawAiReply.replace(/LANG:\s*[a-z]{2}/gi, '').trim();
       }
-    } catch {
+
+      // Record successful AI response in conversation history
+      if (cleanPhone && aiReply) {
+        if (!userConversationHistory[cleanPhone]) {
+          userConversationHistory[cleanPhone] = [];
+        }
+        userConversationHistory[cleanPhone].push(
+          { role: 'user', parts: [{ text: messageBody }] },
+          { role: 'model', parts: [{ text: aiReply }] }
+        );
+        if (userConversationHistory[cleanPhone].length > 8) {
+          userConversationHistory[cleanPhone] = userConversationHistory[cleanPhone].slice(-8);
+        }
+      }
+    } catch (err) {
+      console.error('Gemini fatal exception, falling back to keywords:', err);
       // Fallback if AI service is temporarily unavailable
-      const kwResult = detectIntentKeywords(messageBody);
+      const kwResult = detectIntentKeywords(messageBody, rememberedLang);
       if (kwResult.includes('LANG: ha')) detectedLang = 'ha';
       else if (kwResult.includes('LANG: yo')) detectedLang = 'yo';
       else if (kwResult.includes('LANG: ig')) detectedLang = 'ig';
-      else detectedLang = 'en';
+      else detectedLang = rememberedLang === 'Hausa' ? 'ha' : 'en';
 
       if (kwResult.includes('ORDER_DETECTED:')) {
         detectedMed = messageBody.trim();
