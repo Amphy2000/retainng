@@ -92,6 +92,44 @@ export async function POST(req: NextRequest) {
     const data = await res.json();
 
     if (res.ok && data?.idMessage) {
+      // Proactively send WhatsApp voice note audio if enabled or local dialect requested
+      let voiceSent = false;
+      let voiceMessageId = null;
+      const shouldSendVoice = body.sendVoice || (scenario === 'refill_reminder' && (dialect === 'hausa' || dialect === 'yoruba' || dialect === 'igbo'));
+
+      if (shouldSendVoice) {
+        const langCode = dialect === 'hausa' ? 'ha' : dialect === 'yoruba' ? 'yo' : dialect === 'igbo' ? 'ig' : 'en';
+        // Build clean spoken text for voice note
+        const voiceText = message
+          .replace(/\*+/g, '')
+          .replace(/_[^_]+_/g, '')
+          .replace(/[💊🔔🛵⚡•👉📍💰💵🌟🤖]/gu, '')
+          .trim()
+          .slice(0, 200);
+
+        const audioUrl = `https://retainng.vercel.app/api/tts?lang=${langCode}&text=${encodeURIComponent(voiceText)}`;
+
+        try {
+          const voiceRes = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chatId,
+              urlFile: audioUrl,
+              fileName: `refill_reminder_${langCode}.mp3`,
+              caption: `🎙️ ${dialect ? dialect.toUpperCase() : 'NATIVE'} Audio Reminder`,
+            }),
+          });
+          const vData = await voiceRes.json();
+          if (voiceRes.ok && vData?.idMessage) {
+            voiceSent = true;
+            voiceMessageId = vData.idMessage;
+          }
+        } catch (vErr) {
+          console.warn('Voice send error in test route:', vErr);
+        }
+      }
+
       // 100% Real Audit Log in Supabase
       if (supabaseAdmin) {
         try {
@@ -106,7 +144,9 @@ export async function POST(req: NextRequest) {
               service_or_product: actionTitle,
               amount_ngn: 0,
               is_manual_entry: false,
-              notes: `Live WhatsApp message sent via GreenAPI. ID: ${data.idMessage}. Scenario: ${scenario} (${dialect || 'en'}).`,
+              notes: `Live WhatsApp message sent via GreenAPI. ID: ${data.idMessage}. Scenario: ${scenario} (${dialect || 'en'}). ${
+                voiceSent ? `Audio voice note dispatched: ${voiceMessageId}` : ''
+              }`,
             });
           }
         } catch (e) {
@@ -117,6 +157,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         messageId: data.idMessage,
+        voiceSent,
+        voiceMessageId,
         sentMessage: message,
         recipient: cleanPhone,
       });

@@ -175,30 +175,21 @@ async function sendWhatsApp(toPhone: string, message: string): Promise<void> {
 
 /** Sends native voice note / audio message via Green-API */
 async function sendWhatsAppVoice(toPhone: string, audioUrl: string): Promise<void> {
-  const chatId = `${toPhone}@c.us`;
+  const cleanPhone = toPhone.replace(/[^0-9]/g, '');
+  const chatId = `${cleanPhone}@c.us`;
   try {
-    // 1. Try sendVoice for native WhatsApp voice note player with microphone waveform
-    const res = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendVoice/${GREEN_API_TOKEN}`, {
+    const res = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chatId,
         urlFile: audioUrl,
-        fileName: 'voice_note.ogg',
+        fileName: 'voice_note.mp3',
+        caption: '🎙️ RetainNG Audio Message',
       }),
     });
-
     if (!res.ok) {
-      // 2. Fall back to sendFileByUrl (playable audio message)
-      await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatId,
-          urlFile: audioUrl,
-          fileName: 'voice_note.mp3',
-        }),
-      });
+      console.warn('WhatsApp voice send warning (non-200):', res.status, await res.text());
     }
   } catch (err) {
     console.warn('WhatsApp voice send warning:', err);
@@ -712,14 +703,71 @@ export async function POST(req: NextRequest) {
     }
 
     // =========================================================
-    // CONVERSATIONS — Powered by Gemini 2.5 Flash
+    // CONVERSATIONS — Powered by Gemini 2.5 Flash + Personal AI Memory
     // =========================================================
     const displayName = profileName || `Customer (...${cleanPhone.slice(-4)})`;
+
+    // --- LOAD PERSISTENT PATIENT MEMORY (PERSONAL AI) ---
+    let customerRecord: {
+      id: string;
+      full_name: string;
+      tags: string[];
+      notes: string | null;
+      business_id: string;
+    } | null = null;
+    let prefersVoiceStored = false;
+    let rememberedLang = '';
+    let medicationHistory = '';
+
+    if (supabaseAdmin) {
+      try {
+        const { data: cData } = await supabaseAdmin
+          .from('customers')
+          .select('id, full_name, tags, notes, business_id')
+          .eq('phone', `+${cleanPhone}`)
+          .maybeSingle();
+
+        if (cData) {
+          customerRecord = cData;
+          const tags = cData.tags || [];
+          prefersVoiceStored = tags.includes('Prefers-Voice');
+          const langTag = tags.find((t: string) => t.startsWith('Lang:'));
+          if (langTag) {
+            rememberedLang = langTag.replace('Lang:', '');
+          }
+
+          // Fetch recent medication refills or notes from sales_or_visits
+          const { data: visits } = await supabaseAdmin
+            .from('sales_or_visits')
+            .select('service_or_product')
+            .eq('customer_phone', `+${cleanPhone}`)
+            .order('created_at', { ascending: false })
+            .limit(3);
+
+          medicationHistory = (visits || [])
+            .map((v) => v.service_or_product)
+            .filter((p) => !p.includes('Dispatched') && !p.includes('Test'))
+            .join(', ');
+        }
+      } catch (memErr) {
+        console.warn('Patient memory lookup error:', memErr);
+      }
+    }
+
+    const patientMemoryPrompt = `
+🧠 PATIENT PERSISTENT MEMORY (PERSONAL AI):
+- Patient Real Name: ${customerRecord?.full_name || displayName}
+- Known Previous Medications: ${medicationHistory || 'Routine Chronic / Community Pharmacy Patient'}
+- Remembered Language: ${rememberedLang || 'Detect from conversation'}
+- Remembered Preferred Modality: ${prefersVoiceStored ? 'VOICE NOTES (Prefers spoken audio over text)' : 'Text / Audio'}
+- Clinical / Customer Notes: ${customerRecord?.notes || 'Valued customer'}
+- INSTRUCTION: Treat the patient with warm familiarity like their trusted personal pharmacist who knows them and respects their dialect.`;
 
     let systemPrompt = '';
     if (activeBizName) {
       systemPrompt = `You are an exceptionally smart, culturally attuned AI Health & Customer Retention Concierge for ${activeBizName} in ${resolvedBiz?.location || 'Kaduna, Nigeria'}.
 The client messaging you is named: ${displayName} (Phone ending in: ...${cleanPhone.slice(-4)})
+${patientMemoryPrompt}
 
 🔥 SUPERPOWER: MULTILINGUAL & LOCAL DIALECT EXPERTISE
 You possess native-level fluency in:
@@ -761,6 +809,7 @@ LANG: [ha | yo | ig | ar | en]`;
       systemPrompt = `You are an exceptionally smart, polyglot AI concierge for RetainNG (the customer retention & refill concierge network in Nigeria).
 You represent partner businesses including Danfodio Pharmacy (Kaduna), Apex Health (Lagos/Kaduna), and Amphy Pharmacy.
 The client messaging you is named: ${displayName} (Phone ending in: ...${cleanPhone.slice(-4)})
+${patientMemoryPrompt}
 
 🔥 SUPERPOWER: MULTILINGUAL & LOCAL DIALECT EXPERTISE
 You fluently understand and speak Hausa, Yoruba, Igbo, Nigerian Pidgin, English, and Arabic.
@@ -829,25 +878,30 @@ LANG: [ha | yo | ig | ar | en]`;
     // 1. Send the text reply
     await sendWhatsApp(cleanPhone, aiReply);
 
-    // 2. Deliver voice note if patient sent voice, asked for audio, or speaks local dialect
-    if (
+    // 2. Deliver WhatsApp voice note if patient sent voice, has stored voice preference, or speaks local dialect
+    const shouldSendVoice =
       isVoiceInput ||
+      prefersVoiceStored ||
       detectedLang === 'ha' ||
       detectedLang === 'yo' ||
       detectedLang === 'ig' ||
       messageBody.toLowerCase().includes('voice') ||
       messageBody.toLowerCase().includes('audio') ||
-      messageBody.toLowerCase().includes('murya')
-    ) {
-      const protocol = host.includes('localhost') ? 'http' : 'https';
-      const voiceUrl = `${protocol}://${host}/api/tts?tl=${detectedLang}&text=${encodeURIComponent(
-        aiReply.slice(0, 200)
-      )}`;
+      messageBody.toLowerCase().includes('murya');
+
+    if (shouldSendVoice) {
+      const voiceText = aiReply
+        .replace(/\*+/g, '')
+        .replace(/[💊🩺❤️🌟📍👉]/gu, '')
+        .trim()
+        .slice(0, 200);
+
+      const voiceUrl = `https://retainng.vercel.app/api/tts?lang=${detectedLang}&text=${encodeURIComponent(voiceText)}`;
       await sendWhatsAppVoice(cleanPhone, voiceUrl);
     }
 
-    // 3. Persist the customer's language preference to Supabase
-    if (supabaseAdmin && detectedLang) {
+    // 3. Persist and update patient memory in Supabase
+    if (supabaseAdmin && (detectedLang || isVoiceInput)) {
       const client = supabaseAdmin;
       const langTag =
         detectedLang === 'ha'
@@ -861,23 +915,45 @@ LANG: [ha | yo | ig | ar | en]`;
           : 'Lang:English';
 
       try {
-        const { data: cData } = await client
-          .from('customers')
-          .select('id, tags')
-          .eq('phone', `+${cleanPhone}`)
-          .maybeSingle();
+        let custId = customerRecord?.id;
+        let currentTags = customerRecord?.tags || [];
 
-        if (cData) {
-          const currentTags = cData.tags || [];
+        if (!custId) {
+          const { data: cData } = await client
+            .from('customers')
+            .select('id, tags')
+            .eq('phone', `+${cleanPhone}`)
+            .maybeSingle();
+          if (cData) {
+            custId = cData.id;
+            currentTags = cData.tags || [];
+          }
+        }
+
+        if (custId) {
           const updatedTags = currentTags.filter((t: string) => !t.startsWith('Lang:'));
           updatedTags.push(langTag);
-          if (isVoiceInput && !updatedTags.includes('Prefers-Voice')) {
-            updatedTags.push('Prefers-Voice');
+          if (isVoiceInput || shouldSendVoice) {
+            if (!updatedTags.includes('Prefers-Voice')) {
+              updatedTags.push('Prefers-Voice');
+            }
           }
+
+          const modalityStr = isVoiceInput ? 'Voice Note' : 'WhatsApp Text';
+          const memoryNote = `Prefers ${langTag.replace('Lang:', '')} ${
+            updatedTags.includes('Prefers-Voice') ? 'Voice Notes' : 'text'
+          }. Last contact: ${modalityStr} on ${new Date().toLocaleDateString('en-GB')}. ${
+            detectedMed ? `Order: ${detectedMed}` : ''
+          }`.trim();
+
           await client
             .from('customers')
-            .update({ tags: updatedTags, updated_at: new Date().toISOString() })
-            .eq('id', cData.id);
+            .update({
+              tags: updatedTags,
+              notes: memoryNote,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', custId);
         }
       } catch (err) {
         console.warn('Lang persistence error:', err);

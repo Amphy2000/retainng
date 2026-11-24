@@ -38,13 +38,14 @@ async function sendWhatsAppVoice(toPhone: string, audioUrl: string): Promise<boo
   const cleanPhone = toPhone.replace(/[^0-9]/g, '');
   const chatId = `${cleanPhone}@c.us`;
   try {
-    const res = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendVoice/${GREEN_API_TOKEN}`, {
+    const res = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chatId,
         urlFile: audioUrl,
-        fileName: 'refill_reminder.ogg',
+        fileName: 'refill_reminder.mp3',
+        caption: '🎙️ RetainNG Audio Refill Reminder',
       }),
     });
     return res.ok;
@@ -273,8 +274,8 @@ export async function GET(req: NextRequest) {
 
           // 2. Proactively send voice note in their native tongue
           if (prefersVoice) {
-            const voiceUrl = `${protocol}://${host}/api/tts?tl=${langCode}&text=${encodeURIComponent(
-              reminderMsg.replace(/[*💊👋🩺❤️]/g, '')
+            const voiceUrl = `https://retainng.vercel.app/api/tts?lang=${langCode}&text=${encodeURIComponent(
+              reminderMsg.replace(/[*💊👋🩺❤️]/g, '').slice(0, 200)
             )}`;
             await sendWhatsAppVoice(cust.phone, voiceUrl);
           }

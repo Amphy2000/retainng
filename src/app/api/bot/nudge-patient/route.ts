@@ -53,6 +53,42 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json();
 
+    // Proactively send playable WhatsApp audio voice note if patient prefers voice or speaks local dialect
+    let voiceSent = false;
+    let voiceMessageId = null;
+    const shouldSendVoice = body.sendVoice || dialect === 'hausa' || dialect === 'yoruba' || dialect === 'igbo';
+
+    if (res.ok && shouldSendVoice) {
+      const langCode = dialect === 'hausa' ? 'ha' : dialect === 'yoruba' ? 'yo' : dialect === 'igbo' ? 'ig' : 'en';
+      const voiceText = message
+        .replace(/\*+/g, '')
+        .replace(/[💊🩺❤️🌟]/gu, '')
+        .trim()
+        .slice(0, 200);
+
+      const audioUrl = `https://retainng.vercel.app/api/tts?lang=${langCode}&text=${encodeURIComponent(voiceText)}`;
+
+      try {
+        const vRes = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId,
+            urlFile: audioUrl,
+            fileName: `refill_nudge_${langCode}.mp3`,
+            caption: `🎙️ ${patientName} Refill Reminder`,
+          }),
+        });
+        const vData = await vRes.json();
+        if (vRes.ok && vData?.idMessage) {
+          voiceSent = true;
+          voiceMessageId = vData.idMessage;
+        }
+      } catch (err) {
+        console.warn('Audio nudge dispatch error:', err);
+      }
+    }
+
     // 100% Real Audit Log in Supabase
     if (supabaseAdmin && res.ok) {
       try {
@@ -67,7 +103,9 @@ export async function POST(req: NextRequest) {
             service_or_product: 'On-Demand Refill Nudge Dispatched',
             amount_ngn: 0,
             is_manual_entry: false,
-            notes: `Dispatched WhatsApp reminder for ${medName}. GreenAPI ID: ${data.idMessage || 'Sent'}.`,
+            notes: `Dispatched WhatsApp reminder for ${medName}. Text ID: ${data.idMessage || 'Sent'}. ${
+              voiceSent ? `Voice Note ID: ${voiceMessageId}` : ''
+            }`,
           });
         }
       } catch (err) {
@@ -78,6 +116,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: res.ok,
       messageId: data?.idMessage,
+      voiceSent,
+      voiceMessageId,
       recipient: cleanPhone,
       patientName,
       medication: medName,

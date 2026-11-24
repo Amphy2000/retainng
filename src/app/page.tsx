@@ -21,10 +21,7 @@ import {
   DollarSign,
   CreditCard,
   MessageCircle,
-  Play,
-  Pause,
   Send,
-  Volume2,
   AlertCircle,
   Truck,
   Package,
@@ -68,9 +65,8 @@ export default function AgencyRadarPage() {
   const [sendingTest, setSendingTest] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null);
 
-  // Audio Dialect Player State
-  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
-  const [audioObj, setAudioObj] = useState<HTMLAudioElement | null>(null);
+  // Test Bot Voice Note toggle
+  const [sendVoice, setSendVoice] = useState(true);
 
   // Nudge Patient state
   const [nudgingId, setNudgingId] = useState<string | null>(null);
@@ -324,6 +320,7 @@ export default function AgencyRadarPage() {
           businessName: activeBiz,
           scenario: testScenario,
           dialect: testDialect,
+          sendVoice: sendVoice,
         }),
       });
       const data = await res.json();
@@ -331,7 +328,7 @@ export default function AgencyRadarPage() {
       if (data.success) {
         setTestResult({
           success: true,
-          msg: `✓ Delivered to ${data.recipient || testPhone} via GreenAPI (Message ID: ${data.messageId || 'Delivered'})`,
+          msg: `✓ Delivered to ${data.recipient || testPhone} via GreenAPI ${data.voiceSent ? '(Text + WhatsApp Voice Note 🎙️)' : ''} (ID: ${data.messageId || 'Delivered'})`,
         });
       } else {
         setTestResult({ success: false, msg: data.error || 'Failed to send message via GreenAPI.' });
@@ -340,62 +337,6 @@ export default function AgencyRadarPage() {
       setTestResult({ success: false, msg: 'Network error sending test message.' });
     } finally {
       setSendingTest(false);
-    }
-  }
-
-  // Audio Dialect Voice Note Preview (Instant native speech synthesis)
-  function playAudioSnippet(dialect: string) {
-    if (playingAudio === dialect) {
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
-      if (audioObj) {
-        audioObj.pause();
-      }
-      setPlayingAudio(null);
-      return;
-    }
-
-    let text = '';
-    let voiceLang = 'en-NG';
-
-    if (dialect === 'hausa') {
-      voiceLang = 'ha-NG';
-      text = 'Sannu Alhaji Musa. Maganin hawan jini na ku ya kusa karewa nan da kwanaki uku. Za mu hada muku a aiko muku gida ne?';
-    } else if (dialect === 'yoruba') {
-      voiceLang = 'yo-NG';
-      text = 'E ku ojumo Alhaji Musa. Oogun eje riru yin fe tan laarin ojo meta. Se ki a fi ranse si ile ni tabi e ma wa gba ni ile-ise oogun?';
-    } else if (dialect === 'igbo') {
-      voiceLang = 'ig-NG';
-      text = 'Nnoo Alhaji Musa. Ogwu gi ga-agwukwa nime ubochi ato. I choro ka anyi wetara gi ya nulo ka o bu i ga-abata iburu ya?';
-    } else {
-      voiceLang = 'en-NG';
-      text = 'Good day Alhaji Musa. Your routine blood pressure medication will finish in 3 days. Would you like counter pickup or home delivery?';
-    }
-
-    // Instant browser speech synthesis (0ms delay)
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.92;
-      utterance.pitch = 1.0;
-      utterance.lang = voiceLang;
-      utterance.onend = () => setPlayingAudio(null);
-      utterance.onerror = () => {
-        // Fallback to /api/tts
-        const audio = new Audio(`/api/tts?lang=${dialect === 'hausa' ? 'ha' : 'en'}&text=${encodeURIComponent(text)}`);
-        setAudioObj(audio);
-        audio.play().catch(() => setPlayingAudio(null));
-        audio.onended = () => setPlayingAudio(null);
-      };
-      setPlayingAudio(dialect);
-      window.speechSynthesis.speak(utterance);
-    } else {
-      const audio = new Audio(`/api/tts?lang=${dialect === 'hausa' ? 'ha' : 'en'}&text=${encodeURIComponent(text)}`);
-      setAudioObj(audio);
-      setPlayingAudio(dialect);
-      audio.play().catch(() => setPlayingAudio(null));
-      audio.onended = () => setPlayingAudio(null);
     }
   }
 
@@ -610,56 +551,7 @@ export default function AgencyRadarPage() {
             </div>
           </div>
 
-          {/* Audio Dialect Voice Note Preview Bar (Instant Browser Synthesis) */}
-          <div className="p-4 bg-gradient-to-r from-slate-900 to-slate-950 text-white rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-bold">
-                <Volume2 className="w-4 h-4" />
-                <span>Instant Voice Note Test (0ms Latency)</span>
-              </div>
-              <p className="text-[11px] text-slate-400">
-                Listen to how the bot speaks native audio reminders for elderly patients who cannot read text.
-              </p>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => playAudioSnippet('hausa')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
-                  playingAudio === 'hausa'
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
-                }`}
-              >
-                {playingAudio === 'hausa' ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 text-emerald-400" />}
-                <span>Hausa Voice</span>
-              </button>
-
-              <button
-                onClick={() => playAudioSnippet('yoruba')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
-                  playingAudio === 'yoruba'
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
-                }`}
-              >
-                {playingAudio === 'yoruba' ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 text-cyan-400" />}
-                <span>Yoruba Voice</span>
-              </button>
-
-              <button
-                onClick={() => playAudioSnippet('english')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
-                  playingAudio === 'english'
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
-                }`}
-              >
-                {playingAudio === 'english' ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 text-purple-400" />}
-                <span>English Voice</span>
-              </button>
-            </div>
-          </div>
 
           {/* Real Live Action Stream Feed */}
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1029,19 +921,35 @@ export default function AgencyRadarPage() {
               </div>
 
               {testScenario === 'refill_reminder' && (
-                <div>
-                  <label className="font-bold text-slate-300 block mb-1">Dialect Translation</label>
-                  <select
-                    value={testDialect}
-                    onChange={(e) => setTestDialect(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-950 text-white focus:ring-1 focus:ring-emerald-500 focus:outline-none cursor-pointer"
-                  >
-                    <option value="hausa">Hausa (Sannu Alhaji Musa...)</option>
-                    <option value="yoruba">Yoruba (E ku ojumo Alhaji Musa...)</option>
-                    <option value="igbo">Igbo (Nnoo Alhaji Musa...)</option>
-                    <option value="english">Standard English (Good day...)</option>
-                  </select>
-                </div>
+                <>
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1">Dialect Translation</label>
+                    <select
+                      value={testDialect}
+                      onChange={(e) => setTestDialect(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-950 text-white focus:ring-1 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="hausa">Hausa (Sannu Alhaji Musa...)</option>
+                      <option value="yoruba">Yoruba (E ku ojumo Alhaji Musa...)</option>
+                      <option value="igbo">Igbo (Nnoo Alhaji Musa...)</option>
+                      <option value="english">Standard English (Good day...)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                    <input
+                      type="checkbox"
+                      id="sendVoice"
+                      checked={sendVoice}
+                      onChange={(e) => setSendVoice(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-400 bg-slate-900 border-slate-700 cursor-pointer"
+                    />
+                    <label htmlFor="sendVoice" className="text-slate-300 text-xs font-semibold cursor-pointer select-none flex items-center gap-1.5">
+                      <span>Deliver WhatsApp Voice Note Audio</span>
+                      <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded">Native MP3</span>
+                    </label>
+                  </div>
+                </>
               )}
 
               {testResult && (
