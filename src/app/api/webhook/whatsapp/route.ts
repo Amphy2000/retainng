@@ -173,21 +173,70 @@ async function sendWhatsApp(toPhone: string, message: string): Promise<void> {
   }
 }
 
+/** Sends native voice note / audio message via Green-API */
+async function sendWhatsAppVoice(toPhone: string, audioUrl: string): Promise<void> {
+  const chatId = `${toPhone}@c.us`;
+  try {
+    // 1. Try sendVoice for native WhatsApp voice note player with microphone waveform
+    const res = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendVoice/${GREEN_API_TOKEN}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId,
+        urlFile: audioUrl,
+        fileName: 'voice_note.ogg',
+      }),
+    });
+
+    if (!res.ok) {
+      // 2. Fall back to sendFileByUrl (playable audio message)
+      await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId,
+          urlFile: audioUrl,
+          fileName: 'voice_note.mp3',
+        }),
+      });
+    }
+  } catch (err) {
+    console.warn('WhatsApp voice send warning:', err);
+  }
+}
+
 async function callGeminiAI(
   systemPrompt: string,
-  userMessage: string
+  userMessage: string,
+  audioData?: { base64: string; mimeType: string }
 ): Promise<string> {
   const geminiApiKey = process.env.GEMINI_API_KEY || '';
 
   if (!geminiApiKey) {
-    // Fallback: simple keyword intent detection without AI
     return detectIntentKeywords(userMessage);
+  }
+
+  const parts: Array<Record<string, unknown>> = [];
+  if (audioData?.base64) {
+    parts.push({
+      inline_data: {
+        mime_type: audioData.mimeType,
+        data: audioData.base64,
+      },
+    });
+  }
+  if (userMessage.trim()) {
+    parts.push({ text: userMessage });
+  } else if (audioData?.base64) {
+    parts.push({
+      text: 'Listen carefully to this voice note message. The patient is speaking in their native language or local Nigerian dialect (Hausa, Yoruba, Igbo, Nigerian Pidgin, English, or Arabic). Understand their health or refill need and respond in that exact dialect.',
+    });
   }
 
   const body = {
     system_instruction: { parts: [{ text: systemPrompt }] },
-    contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 400 },
+    contents: [{ role: 'user', parts }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
   };
 
   try {
@@ -211,6 +260,43 @@ async function callGeminiAI(
 
 function detectIntentKeywords(msg: string): string {
   const lower = msg.toLowerCase();
+  
+  // HAUSA KEYWORDS
+  if (
+    lower.includes('hawan jini') ||
+    lower.includes('ciwon suga') ||
+    lower.includes('zazzabi') ||
+    lower.includes('magani') ||
+    lower.includes('ya kare') ||
+    lower.includes('kare') ||
+    lower.includes('aiko')
+  ) {
+    return `Sannu! 💊 Mun karbi bukatarku ta magani. Za a hada muku nan take. Kuna son a kawo muku gida ne ko za ku zo ku karba?\nLANG: ha\nORDER_DETECTED: ${msg.trim()}`;
+  }
+
+  // YORUBA KEYWORDS
+  if (
+    lower.includes('eje riru') ||
+    lower.includes('atogbe') ||
+    lower.includes('oogun') ||
+    lower.includes('ti tan') ||
+    lower.includes('fi ranse')
+  ) {
+    return `E ku ojumo! 💊 A ti gba ibeere yin fun oogun. Se e fe ki a fi ranse si ile ni tabi e ma wa gba ni ile-ise oogun wa?\nLANG: yo\nORDER_DETECTED: ${msg.trim()}`;
+  }
+
+  // IGBO KEYWORDS
+  if (
+    lower.includes('mgbali elu') ||
+    lower.includes('shuga') ||
+    lower.includes('ogwu') ||
+    lower.includes('agwula') ||
+    lower.includes('zitere')
+  ) {
+    return `Nnoo! 💊 Anyi anatala aro gi maka ogwu. O bu ka e ziteere gi ya n'ulo ka o bu na i ga-abia n'onwe gi nata ya?\nLANG: ig\nORDER_DETECTED: ${msg.trim()}`;
+  }
+
+  // REFILL / MEDICATIONS (English / Pidgin)
   if (
     lower.includes('refill') ||
     lower.includes('finish') ||
@@ -233,7 +319,7 @@ function detectIntentKeywords(msg: string): string {
     lower.includes('sugar') ||
     lower.includes('diabetes')
   ) {
-    return `No wahala at all! 💊 We have received your refill request.\n\nWould you like home delivery or will you pick it up at the pharmacy?\nORDER_DETECTED: ${msg.trim()}`;
+    return `No wahala at all! 💊 We have received your refill request.\n\nWould you like home delivery or will you pick it up at the pharmacy?\nLANG: en\nORDER_DETECTED: ${msg.trim()}`;
   }
   if (
     lower.includes('deliver') ||
@@ -246,7 +332,7 @@ function detectIntentKeywords(msg: string): string {
     lower.includes('street') ||
     lower.includes('road')
   ) {
-    return `📍 Got your address! Our team will prepare your order and call you to confirm delivery soon.\nORDER_DETECTED: delivery request`;
+    return `📍 Got your address! Our team will prepare your order and call you to confirm delivery soon.\nLANG: en\nORDER_DETECTED: delivery request`;
   }
   if (
     lower.includes('dosage') ||
@@ -261,7 +347,7 @@ function detectIntentKeywords(msg: string): string {
     lower.includes('question') ||
     lower.includes('?')
   ) {
-    return `That is a great question! 🩺 For accurate clinical advice, please speak with our pharmacist directly. You can also call or visit us during opening hours.`;
+    return `That is a great question! 🩺 For accurate clinical advice, please speak with our pharmacist directly. You can also call or visit us during opening hours.\nLANG: en`;
   }
   if (
     lower.includes('hi') ||
@@ -272,9 +358,9 @@ function detectIntentKeywords(msg: string): string {
     lower.includes('how are') ||
     lower.includes('please')
   ) {
-    return `👋 Hello! Welcome to RetainNG Health Concierge. How can we help you today? If your medication is running low, just let us know!`;
+    return `👋 Hello! Welcome to RetainNG Health Concierge. How can we help you today? If your medication is running low, just let us know!\nLANG: en`;
   }
-  return `Hello! 👋 We are here to help with medication refills, delivery, and health queries. How can we assist you today?`;
+  return `Hello! 👋 We are here to help with medication refills, delivery, and health queries in your preferred language or dialect. How can we assist you today?\nLANG: en`;
 }
 
 export async function POST(req: NextRequest) {
@@ -284,6 +370,9 @@ export async function POST(req: NextRequest) {
     let fromNumber = '';
     let messageBody = '';
     let profileName = '';
+
+    let isVoiceInput = false;
+    let audioData: { base64: string; mimeType: string } | undefined = undefined;
 
     if (contentType.includes('application/x-www-form-urlencoded')) {
       const formData = await req.formData();
@@ -317,6 +406,31 @@ export async function POST(req: NextRequest) {
         json?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name ||
         json?.messages?.[0]?.from_name ||
         '';
+
+      // Check for incoming audio / voice note
+      const fileData = json?.messageData?.fileMessageData;
+      const msgType = json?.messageData?.typeMessage || '';
+      if (
+        msgType === 'audioMessage' ||
+        msgType === 'voiceMessage' ||
+        fileData?.mimeType?.startsWith('audio')
+      ) {
+        isVoiceInput = true;
+        if (fileData?.downloadUrl) {
+          try {
+            const audioRes = await fetch(fileData.downloadUrl);
+            if (audioRes.ok) {
+              const buf = await audioRes.arrayBuffer();
+              audioData = {
+                base64: Buffer.from(buf).toString('base64'),
+                mimeType: fileData.mimeType || 'audio/ogg',
+              };
+            }
+          } catch (e) {
+            console.warn('Audio download failed:', e);
+          }
+        }
+      }
     }
 
     // Clean & normalize phone
@@ -337,8 +451,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ignored: 'self-message' });
     }
 
-    if (!messageBody.trim()) {
+    if (!messageBody.trim() && !audioData) {
       return NextResponse.json({ ignored: 'empty-message' });
+    }
+
+    if (!messageBody.trim() && audioData) {
+      messageBody = '[Voice Note Message]';
     }
 
     // --- Multi-Business attribution resolution ---
@@ -392,84 +510,123 @@ export async function POST(req: NextRequest) {
 
     let systemPrompt = '';
     if (activeBizName) {
-      systemPrompt = `You are a warm, highly competent AI concierge for ${activeBizName} in ${resolvedBiz?.location || 'Nigeria'}.
-The client messaging you is named: ${displayName}
-Their phone ending in: ...${cleanPhone.slice(-4)}
+      systemPrompt = `You are an exceptionally smart, culturally attuned AI Health & Customer Retention Concierge for ${activeBizName} in ${resolvedBiz?.location || 'Kaduna, Nigeria'}.
+The client messaging you is named: ${displayName} (Phone ending in: ...${cleanPhone.slice(-4)})
 
-Your guidelines:
-1. Respond helpfully, warmly, and concisely in simple Nigerian English (using friendly natural phrasing).
-2. If the user just states their medication name (e.g. "BP", "Amlodipine", "Metformin", "Malaria", "Vitamins"):
-   - For Chronic (BP, Diabetes, Heart, Ulcer): warmly confirm you have scheduled their reminder for 25 days before it finishes.
-   - For Acute (Malaria, Antibiotics, Cough, Typhoid): warmly wish them a speedy recovery and let them know you'll check in on them in 4 days to make sure they are feeling better.
-   - For Vitamins / Family Essentials: confirm you have set their 30-day reminder.
-3. If they mention refills, medications (e.g. Amlodipine, Metformin, BP, diabetes): acknowledge their request warmly on behalf of ${activeBizName} and ask if they prefer home delivery or store pickup.
-4. If they provide a delivery address: confirm the address warmly and let them know the ${activeBizName} team is packaging it and will call them to confirm dispatch.
-5. If they ask clinical/service questions: give a clear, safe, accurate brief answer and invite them to speak with the pharmacist/manager if needed.
-6. NEVER repeat menus or say "reply 1 for this, reply 2 for that". Be human, conversational, empathetic, and attentive.
-7. Keep replies concise (under 80 words).
+🔥 SUPERPOWER: MULTILINGUAL & LOCAL DIALECT EXPERTISE
+You possess native-level fluency in:
+1. HAUSA (Kano, Kaduna, Zaria, Sokoto dialects) — e.g. "Sannu", "Ina kwana", "Maganin hawan jini", "Maganin ciwon suga", "Don Allah a aiko min gida", "Maganina ya kare".
+2. YORUBA — e.g. "E ku irole", "Oogun eje riru", "Oogun atogbe", "Oogun iba", "E jowo e fi ranse si mi".
+3. IGBO — e.g. "Nnoo", "Kedu", "Ogwu mgbali elu", "Ogwu shuga", "Biko zitere m ya n'ulo".
+4. NIGERIAN PIDGIN — e.g. "How far", "My BP drug don finish", "Abeg send am come my house", "No wahala at all".
+5. NIGERIAN ENGLISH & ARABIC.
 
-Important: If the patient is ordering or refilling a product/service, append this exact tag at the very end of your response on its own line:
-ORDER_DETECTED: [item or medication name]`;
+🚨 CRITICAL LANGUAGE MATCHING RULE:
+- ALWAYS detect the patient's language or dialect from their text or voice note.
+- YOU MUST REPLY IN THE EXACT SAME LANGUAGE OR DIALECT they communicated in!
+- If they speak Hausa, reply in warm, respectful, fluent Hausa.
+- If they speak Yoruba, reply in warm, respectful Yoruba.
+- If they speak Igbo, reply in warm, respectful Igbo.
+- If they speak Pidgin, reply in friendly Nigerian Pidgin.
+- If they speak English, reply in friendly Nigerian English.
+
+CLINICAL & REFILL INTELLIGENCE:
+1. Identify all medications (brands, generics, or local names):
+   - Chronic: Amlodipine, Metformin, Lisinopril, Losartan, Atorvastatin, Omeprazole, etc. ("hawan jini", "ciwon suga", "eje riru", "mgbali elu").
+   - Acute: Malaria (Coartem, Lonart, Amatem), Antibiotics (Augmentin, Amoxil), Pain/Fever (Paracetamol).
+2. If they need a refill or their medication finished:
+   - Acknowledge warmly on behalf of ${activeBizName}.
+   - Ask if they want home delivery (kawo gida / fi ranse si ile) or pharmacy pickup.
+3. If they give a delivery address: confirm the address warmly and let them know our dispensary team is packing it.
+4. Voice Note Friendly: Keep replies natural, human, conversational, and under 60 words so it sounds smooth when played as a voice note. Never use numbered menus or robotic phrases.
+
+METADATA TAGS AT THE VERY END (each on its own line):
+ORDER_DETECTED: [detected medication or item, or NONE]
+LANG: [ha | yo | ig | ar | en]`;
     } else {
-      systemPrompt = `You are a warm, highly competent AI concierge for RetainNG (the customer retention & refill concierge network in Nigeria).
-You represent partner businesses including Danfodio Pharmacy (Barnawa, Kaduna), Apex Health & Community Pharmacy, and Lekki Grooming & Barber Lounge.
-The client messaging you is named: ${displayName}
-Their phone ending in: ...${cleanPhone.slice(-4)}
+      systemPrompt = `You are an exceptionally smart, polyglot AI concierge for RetainNG (the customer retention & refill concierge network in Nigeria).
+You represent partner businesses including Danfodio Pharmacy (Kaduna), Apex Health (Lagos/Kaduna), and Amphy Pharmacy.
+The client messaging you is named: ${displayName} (Phone ending in: ...${cleanPhone.slice(-4)})
 
-Your guidelines:
-1. Greet them warmly as RetainNG Concierge in friendly Nigerian English.
-2. If they ask for a refill or service without stating which pharmacy or store they visit: ask them warmly which of our partner stores or pharmacies they are registered with (e.g. Danfodio Pharmacy, Apex Health, etc.) so you can route their order immediately.
-3. If they mention a specific store name, acknowledge it and assist them with their request for that store.
-4. Keep replies friendly, concise, and helpful (under 80 words).
+🔥 SUPERPOWER: MULTILINGUAL & LOCAL DIALECT EXPERTISE
+You fluently understand and speak Hausa, Yoruba, Igbo, Nigerian Pidgin, English, and Arabic.
+ALWAYS REPLY IN THE EXACT SAME LANGUAGE OR DIALECT the patient used!
 
-Important: If an order or refill item is detected, append this exact tag at the very end of your response on its own line:
-ORDER_DETECTED: [item name]`;
+Guidelines:
+1. Greet them warmly in their language/dialect.
+2. If they ask for a refill or service without stating which pharmacy they visit: ask them which partner store they are registered with so you can route their order immediately.
+3. Keep replies friendly, concise (under 60 words), and voice-note ready.
+
+METADATA TAGS AT THE VERY END (each on its own line):
+ORDER_DETECTED: [detected medication or item, or NONE]
+LANG: [ha | yo | ig | ar | en]`;
     }
 
     let aiReply = '';
     let isOrder = false;
     let detectedMed = '';
+    let detectedLang = 'en';
 
     try {
-      const rawAiReply = await callGeminiAI(systemPrompt, messageBody);
+      const rawAiReply = await callGeminiAI(systemPrompt, messageBody, audioData);
+
+      if (rawAiReply.includes('LANG:')) {
+        const langMatch = rawAiReply.match(/LANG:\s*([a-z]{2})/i);
+        if (langMatch) detectedLang = langMatch[1].toLowerCase();
+      }
 
       if (rawAiReply.includes('ORDER_DETECTED:')) {
         const lines = rawAiReply.split('\n');
         const orderLine = lines.find((l) => l.startsWith('ORDER_DETECTED:'));
         if (orderLine) {
-          detectedMed = orderLine.replace('ORDER_DETECTED:', '').trim() || messageBody;
-          isOrder = true;
+          const item = orderLine.replace('ORDER_DETECTED:', '').trim();
+          if (item && item.toUpperCase() !== 'NONE') {
+            detectedMed = item;
+            isOrder = true;
+          }
         }
         aiReply = lines
-          .filter((l) => !l.startsWith('ORDER_DETECTED:'))
+          .filter((l) => !l.startsWith('ORDER_DETECTED:') && !l.startsWith('LANG:'))
           .join('\n')
           .trim();
       } else {
-        aiReply = rawAiReply;
+        aiReply = rawAiReply.replace(/LANG:\s*[a-z]{2}/gi, '').trim();
       }
     } catch {
       // Fallback if AI service is temporarily unavailable
       const kwResult = detectIntentKeywords(messageBody);
-      if (kwResult.startsWith('INTENT:REFILL')) {
+      if (kwResult.includes('LANG: ha')) detectedLang = 'ha';
+      else if (kwResult.includes('LANG: yo')) detectedLang = 'yo';
+      else if (kwResult.includes('LANG: ig')) detectedLang = 'ig';
+      else detectedLang = 'en';
+
+      if (kwResult.includes('ORDER_DETECTED:')) {
         detectedMed = messageBody.trim();
         isOrder = true;
-        aiReply =
-          `Got it ${displayName}! 💊 We have received your refill request for *${detectedMed}*.\n\n` +
-          `Which pharmacy should we prepare this with — Danfodio Pharmacy or Apex Health? And would you like pickup or home delivery?`;
-      } else if (kwResult.startsWith('INTENT:DELIVERY')) {
-        isOrder = true;
-        aiReply =
-          `📍 Perfect! We have noted your delivery address:\n*${messageBody.trim()}*\n\n` +
-          `Our dispensary team will call you shortly to confirm and dispatch your order.`;
-      } else {
-        aiReply =
-          `Hello ${displayName}! 👋 Welcome to RetainNG Health & Care Concierge.\n\n` +
-          `Which of our partner pharmacies or stores are you reaching today? (e.g. Danfodio Pharmacy or Apex Health) Let us know and we'll assist you right away! 💊`;
       }
+      aiReply = kwResult
+        .split('\n')
+        .filter((l) => !l.startsWith('ORDER_DETECTED:') && !l.startsWith('LANG:'))
+        .join('\n')
+        .trim();
     }
 
-    // Send the human, AI-generated reply to the patient
+    // 1. Send the text reply
     await sendWhatsApp(cleanPhone, aiReply);
+
+    // 2. Deliver voice note if patient sent voice or asked for audio
+    if (
+      isVoiceInput ||
+      messageBody.toLowerCase().includes('voice') ||
+      messageBody.toLowerCase().includes('audio') ||
+      messageBody.toLowerCase().includes('murya')
+    ) {
+      const protocol = host.includes('localhost') ? 'http' : 'https';
+      const voiceUrl = `${protocol}://${host}/api/tts?tl=${detectedLang}&text=${encodeURIComponent(
+        aiReply.slice(0, 200)
+      )}`;
+      await sendWhatsAppVoice(cleanPhone, voiceUrl);
+    }
 
     // Send manager dispatch alert for refill orders
     if (isOrder) {
