@@ -49,6 +49,26 @@ function SettingsContent() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('active');
   const [renewalDate, setRenewalDate] = useState<string>('');
 
+  const [founderPin, setFounderPin] = useState('202600');
+  const [pinSaved, setPinSaved] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('retainng_founder_pin');
+      if (saved) setFounderPin(saved);
+    }
+  }, []);
+
+  function handleSavePin() {
+    if (founderPin.length === 6) {
+      localStorage.setItem('retainng_founder_pin', founderPin);
+      setPinSaved(true);
+      setTimeout(() => setPinSaved(false), 2500);
+    } else {
+      alert('PIN must be exactly 6 digits.');
+    }
+  }
+
   const [isSaved, setIsSaved] = useState(false);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [newBizName, setNewBizName] = useState('');
@@ -564,6 +584,30 @@ function SettingsContent() {
                   onChange={(e) => setRenewalDate(e.target.value)}
                   className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-700 bg-slate-800 text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="space-y-0.5">
+                <span className="font-bold text-slate-200">Founder Radar Access PIN</span>
+                <p className="text-[11px] text-slate-400">Protects Agency Radar finances, partner fleet, and confidential analytics.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="password"
+                  maxLength={6}
+                  value={founderPin}
+                  onChange={(e) => setFounderPin(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="••••••"
+                  className="w-28 px-3 py-1.5 text-center font-mono rounded-lg border border-slate-700 bg-slate-850 text-white text-xs tracking-widest focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleSavePin}
+                  className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-lg transition cursor-pointer"
+                >
+                  {pinSaved ? '✓ Saved!' : 'Save PIN'}
+                </button>
               </div>
             </div>
 

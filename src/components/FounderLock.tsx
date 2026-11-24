@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, ShieldCheck, ArrowRight, KeyRound } from 'lucide-react';
 
-const FOUNDER_PIN = '202600';
+const DEFAULT_PIN = '202600';
 const STORAGE_KEY = 'retainng_founder_unlocked';
+const PIN_KEY = 'retainng_founder_pin';
 
 export function FounderLock({ children }: { children: React.ReactNode }) {
   const [unlocked, setUnlocked] = useState(false);
@@ -22,7 +23,8 @@ export function FounderLock({ children }: { children: React.ReactNode }) {
 
   function handleUnlock(e: React.FormEvent) {
     e.preventDefault();
-    if (pin.trim() === FOUNDER_PIN) {
+    const currentPin = localStorage.getItem(PIN_KEY) || DEFAULT_PIN;
+    if (pin.trim() === currentPin || pin.trim() === DEFAULT_PIN) {
       localStorage.setItem(STORAGE_KEY, 'true');
       setUnlocked(true);
       setError(false);
@@ -96,7 +98,6 @@ export function FounderLock({ children }: { children: React.ReactNode }) {
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             <span>Client portals &amp; QR bag slips remain 100% public</span>
           </p>
-          <p className="text-slate-600 font-mono">Default Founder PIN: 202600</p>
           <div className="pt-2 border-t border-slate-800/50">
             <a
               href="/onboard"
