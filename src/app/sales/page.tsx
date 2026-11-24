@@ -15,6 +15,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Zap,
+  Users,
 } from 'lucide-react';
 
 export default function AnalyticsRetainedPage() {
@@ -30,8 +31,10 @@ export default function AnalyticsRetainedPage() {
       : allBusinesses.filter((b) => b.id === selectedBiz);
 
     let totalPatients = 0;
+    let todayOnboarded = 0;
     let totalRefills = 0;
     let totalProtectedRevenue = 0;
+    const nowStr = new Date().toDateString();
     const activityLog: Array<{
       id: string;
       customerName: string;
@@ -46,6 +49,13 @@ export default function AnalyticsRetainedPage() {
       const custs = getCustomers(biz.id);
       const sales = getSales(biz.id);
       totalPatients += custs.length;
+
+      custs.forEach((c) => {
+        const cDate = c.created_at || c.consent_date;
+        if (cDate && new Date(cDate).toDateString() === nowStr) {
+          todayOnboarded++;
+        }
+      });
 
       sales.forEach((s) => {
         totalRefills++;
@@ -67,7 +77,8 @@ export default function AnalyticsRetainedPage() {
     });
 
     return {
-      totalPatients,
+      totalCustomers: totalPatients,
+      todayOnboarded,
       totalRefills,
       totalProtectedRevenue,
       activityLog: activityLog.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
@@ -161,15 +172,19 @@ export default function AnalyticsRetainedPage() {
         <div className="p-5 bg-white rounded-3xl border border-slate-200 shadow-sm space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Staff Labor Saved
+              Total Clients Onboarded
             </span>
-            <Clock className="w-4 h-4 text-amber-500" />
+            <Users className="w-4 h-4 text-emerald-600" />
           </div>
           <p className="text-3xl font-black text-slate-900 leading-none">
-            0 hrs
+            {metrics.totalCustomers}
           </p>
           <p className="text-xs text-slate-500 pt-1">
-            Zero counter data entry or manual bookkeeping
+            {metrics.todayOnboarded > 0 ? (
+              <span className="text-emerald-600 font-bold">+{metrics.todayOnboarded} joined today</span>
+            ) : (
+              <span>All-time client network</span>
+            )}
           </p>
         </div>
       </div>

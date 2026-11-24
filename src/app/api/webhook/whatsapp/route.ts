@@ -375,6 +375,137 @@ function detectIntentKeywords(msg: string): string {
   return `Hello! 👋 We are here to help with medication refills, delivery, and health queries in your preferred language or dialect. How can we assist you today?\nLANG: en`;
 }
 
+async function handleManagerDispatch(
+  managerPhone: string,
+  messageText: string,
+  host: string
+): Promise<{ success: boolean; message: string }> {
+  const match = messageText.match(/dispatch\s*([0-9+]+)?/i);
+  const targetDigits = match?.[1] ? match[1].replace(/[^0-9]/g, '') : '';
+
+  if (!supabaseAdmin) {
+    return { success: false, message: 'Database is not currently accessible.' };
+  }
+
+  // Find customer in Supabase
+  let customer: {
+    id: string;
+    full_name: string;
+    phone: string;
+    tags?: string[];
+    business_id: string;
+  } | null = null;
+
+  if (targetDigits) {
+    const { data: custs } = await supabaseAdmin
+      .from('customers')
+      .select('id, full_name, phone, tags, business_id')
+      .ilike('phone', `%${targetDigits}%`)
+      .limit(1);
+    if (custs && custs.length > 0) customer = custs[0];
+  }
+
+  if (!customer) {
+    const { data: recentSales } = await supabaseAdmin
+      .from('sales_or_visits')
+      .select('customer_id, customer_name, customer_phone, business_id, service_or_product')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (recentSales && recentSales.length > 0) {
+      const s = recentSales[0];
+      const { data: c } = await supabaseAdmin
+        .from('customers')
+        .select('id, full_name, phone, tags, business_id')
+        .eq('id', s.customer_id)
+        .maybeSingle();
+      customer = c || {
+        id: s.customer_id,
+        full_name: s.customer_name,
+        phone: s.customer_phone,
+        tags: [],
+        business_id: s.business_id,
+      };
+    }
+  }
+
+  if (!customer || !customer.phone) {
+    return {
+      success: false,
+      message: 'Could not find a pending order to dispatch. Please reply with "DISPATCH [last 4 digits]" e.g. DISPATCH 3129',
+    };
+  }
+
+  let bizName = 'Your Pharmacy';
+  if (customer.business_id) {
+    const { data: b } = await supabaseAdmin
+      .from('businesses')
+      .select('name')
+      .eq('id', customer.business_id)
+      .maybeSingle();
+    if (b?.name) bizName = b.name;
+  }
+
+  const custCleanPhone = customer.phone.replace(/[^0-9]/g, '');
+  const custName = customer.full_name || `Customer ...${custCleanPhone.slice(-4)}`;
+  const tags: string[] = customer.tags || [];
+
+  const isHausa = tags.includes('Lang:Hausa');
+  const isYoruba = tags.includes('Lang:Yoruba');
+  const isIgbo = tags.includes('Lang:Igbo');
+  const prefersVoice = tags.includes('Prefers-Voice') || isHausa || isYoruba || isIgbo;
+
+  let dispatchMsg = '';
+  let langCode = 'en';
+
+  if (isHausa) {
+    langCode = 'ha';
+    dispatchMsg = `🛵 *Labari mai kyau ${custName}!* Maganinku daga *${bizName}* an gama hadawa kuma mai kawo kaya (dispatch rider) yana kan hanya! Zai iso gare ku nan da minti 30-45. 💊 Muna fatan samun sauƙi cikin gaggawa!`;
+  } else if (isYoruba) {
+    langCode = 'yo';
+    dispatchMsg = `🛵 *Iroyin ayo ${custName}!* Oogun yin lati *${bizName}* ti wa ni imurasile, akowe dispatch si wa lori ona lati gbe e wa! E reti re laarin iseju 30-45. 💊 E seun pupo!`;
+  } else if (isIgbo) {
+    langCode = 'ig';
+    dispatchMsg = `🛵 *Ozi ọma ${custName}!* Ọgwụ gị si na *${bizName}* adịla njikere, onye dispatch nọ na ụzọ na-eweta ya! Ọ ga-eru n'ime nkeji 30-45. 💊 Daalụ nke ukwuu!`;
+  } else {
+    langCode = 'en';
+    dispatchMsg = `🛵 *Good news ${custName}!* Your order from *${bizName}* has been packaged and our dispatch rider is heading your way! Expect delivery in 30-45 minutes. 💊 Thank you for choosing ${bizName}!`;
+  }
+
+  // Send WhatsApp message to patient
+  await sendWhatsApp(custCleanPhone, dispatchMsg);
+
+  // Send voice note in their native tongue
+  if (prefersVoice) {
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const voiceUrl = `${protocol}://${host}/api/tts?tl=${langCode}&text=${encodeURIComponent(
+      dispatchMsg.replace(/[*🛵💊]/g, '')
+    )}`;
+    await sendWhatsAppVoice(custCleanPhone, voiceUrl);
+  }
+
+  // Log dispatch in sales_or_visits
+  try {
+    await supabaseAdmin.from('sales_or_visits').insert({
+      business_id: customer.business_id,
+      customer_id: customer.id,
+      customer_name: custName,
+      customer_phone: customer.phone,
+      service_or_product: 'Order Dispatched (Rider En Route)',
+      amount_ngn: 0,
+      notes: `Dispatched by manager from WhatsApp. Patient notified via ${isHausa ? 'Hausa' : isYoruba ? 'Yoruba' : isIgbo ? 'Igbo' : 'English'} WhatsApp + Voice.`,
+      is_manual_entry: false,
+    });
+  } catch (e) {
+    console.warn('Dispatch log error:', e);
+  }
+
+  return {
+    success: true,
+    message: `✅ *DISPATCH CONFIRMED — ${bizName}*\n\nPatient *${custName}* (+${custCleanPhone}) has been notified via WhatsApp${prefersVoice ? ' and Voice Note' : ''}.\n\n🛵 Dispatch rider is en route!`,
+  };
+}
+
 export async function POST(req: NextRequest) {
   const host = req.headers.get('host') || 'retainng.vercel.app';
   try {
@@ -498,6 +629,17 @@ export async function POST(req: NextRequest) {
 
     if (!messageBody.trim() && imageData) {
       messageBody = '[Photo of medication blister pack or doctor prescription]';
+    }
+
+    // --- 0. CHECK FOR 1-TAP MANAGER DISPATCH COMMAND ---
+    if (messageBody.trim().toUpperCase().startsWith('DISPATCH')) {
+      const dispatchRes = await handleManagerDispatch(cleanPhone, messageBody.trim(), host);
+      await sendWhatsApp(cleanPhone, dispatchRes.message);
+      return NextResponse.json({
+        success: dispatchRes.success,
+        intent: 'manager_dispatch',
+        message: dispatchRes.message,
+      });
     }
 
     // --- Multi-Business attribution resolution ---
@@ -733,9 +875,15 @@ LANG: [ha | yo | ig | ar | en]`;
         const managerAlert =
           `🚨 *NEW REFILL / SERVICE ORDER — ${targetStore}*\n\n` +
           `👤 *Customer:* ${displayName} (WhatsApp: ...${cleanPhone.slice(-4)})\n` +
+          `📱 *Phone:* +${cleanPhone}\n` +
           `💊 *Order / Request:* ${detectedMed || messageBody}\n` +
-          `⏱️ *Status:* Clock reset for 28 days.\n` +
-          `📞 Please check with dispensary & call patient to confirm.`;
+          `💰 *Estimated Value:* ₦4,500\n` +
+          `⏱️ *Status:* Pending Dispensary Packing\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n` +
+          `⚡ *1-TAP DISPATCH COMMAND:*\n` +
+          `When packed & rider leaves, reply:\n` +
+          `👉 *DISPATCH ${cleanPhone.slice(-4)}*\n\n` +
+          `The bot will automatically notify the patient via WhatsApp & Voice Note in their dialect! 🛵💨`;
 
         await sendWhatsApp(managerPhone, managerAlert);
       }

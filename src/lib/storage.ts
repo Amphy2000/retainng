@@ -287,8 +287,8 @@ export function getCustomers(businessId: string): Customer[] {
       .sort((a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime());
 
     const totalSpent = custSales.reduce((acc, s) => acc + (Number(s.amount_ngn) || 0), 0);
-    const lastVisit = custSales.length > 0 ? custSales[0].visit_date : (cust.last_visit_date || cust.created_at);
-    // Every registered customer has at least 1 visit (their registration/touchpoint visit)
+    const lastVisit = custSales.length > 0 ? custSales[0].visit_date : (cust.last_visit_date || cust.created_at || cust.consent_date || new Date().toISOString());
+    // Every registered customer has at least 1 touchpoint visit (their registration/touchpoint visit)
     const totalVisits = Math.max(1, cust.total_visits || 0, custSales.length);
 
     return {

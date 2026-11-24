@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useParams } from 'next/navigation';
-import { getBusinessBySlug, getCustomers, getSales } from '@/lib/storage';
+import { getBusinessBySlug, getCustomers, getSales, syncFleetFromCloud } from '@/lib/storage';
 import { Business, Customer, SaleOrVisit } from '@/types';
 import { QrCodeModal } from '@/components/QrCodeModal';
 import { formatNgn, formatRelativeTime } from '@/lib/utils';
@@ -45,15 +45,32 @@ function PortalInner() {
 
   useEffect(() => {
     if (!slug) return;
-    const timer = setTimeout(() => {
-      const biz = getBusinessBySlug(slug);
-      if (biz) {
-        setBusiness(biz);
-        reloadData(biz.id);
+    // Initial fetch from local
+    const biz = getBusinessBySlug(slug);
+    if (biz) {
+      setBusiness(biz);
+      reloadData(biz.id);
+    }
+    setLoading(false);
+
+    // Sync from authoritative cloud Supabase so multi-device actions reflect immediately
+    syncFleetFromCloud().then(() => {
+      const freshBiz = getBusinessBySlug(slug);
+      if (freshBiz) {
+        setBusiness(freshBiz);
+        reloadData(freshBiz.id);
       }
-      setLoading(false);
-    }, 0);
-    return () => clearTimeout(timer);
+    });
+
+    const handleSync = () => {
+      const freshBiz = getBusinessBySlug(slug);
+      if (freshBiz) {
+        setBusiness(freshBiz);
+        reloadData(freshBiz.id);
+      }
+    };
+    window.addEventListener('retainng_fleet_synced', handleSync);
+    return () => window.removeEventListener('retainng_fleet_synced', handleSync);
   }, [slug]);
 
   // Estimated stats
