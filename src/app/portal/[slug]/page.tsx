@@ -67,15 +67,13 @@ function PortalInner() {
       .catch((err) => console.warn('QR gen error:', err));
   }, [business]);
 
-  // If URL has ?print=1, automatically trigger print once QR is ready
+  // If URL has ?print=1, automatically trigger print once business is ready
   useEffect(() => {
-    if (isPrintParam && qrDataUrl) {
-      const timer = setTimeout(() => {
-        window.print();
-      }, 500);
-      return () => clearTimeout(timer);
+    if (isPrintParam && business) {
+      setPrintMode(true);
+      setQrOpen(true);
     }
-  }, [isPrintParam, qrDataUrl]);
+  }, [isPrintParam, business]);
 
   // Exact timestamp formatter (e.g. "Today • 12:02 PM" or "Nov 24 • 12:02 PM")
   function formatExactDateTime(isoString?: string): string {
@@ -292,7 +290,7 @@ function PortalInner() {
 
             <div className="grid grid-cols-2 gap-2.5 pt-1">
               <button
-                onClick={() => window.print()}
+                onClick={() => { setPrintMode(true); setQrOpen(true); }}
                 className="py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-md"
               >
                 <Printer className="w-4 h-4" />
@@ -397,82 +395,14 @@ function PortalInner() {
             )}
           </div>
         </div>
-
-        {/* ━━━ NATIVE 4-IN-1 BAG SLIPS (ALWAYS PRINTS, ZERO MODAL DEPENDENCY) ━━━ */}
-        <div className="portal-native-slips w-full">
-          <div className="a4-printable-slips grid grid-cols-2 gap-3 p-0 bg-white">
-            {[1, 2, 3, 4].map((slip) => (
-              <div
-                key={slip}
-                className="a4-slip-item border-2 border-dashed border-slate-900 rounded-2xl p-4 bg-white text-center flex flex-col justify-between"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[9px] print:text-[8.5px] text-slate-500 font-extrabold uppercase tracking-wider border-b border-dashed border-slate-300 pb-1">
-                    <span>✂ Cut Line</span>
-                    <span>VIP Prescription Slip</span>
-                  </div>
-                  <div className="text-base font-black uppercase tracking-tight text-slate-950 truncate pt-0.5">
-                    {business?.name || 'Community Pharmacy'}
-                  </div>
-                  <div className="text-[10px] font-extrabold text-emerald-950 bg-emerald-100 px-3 py-0.5 rounded-full border border-emerald-300 inline-block">
-                    🎁 VIP HEALTH &amp; WELLNESS PASS
-                  </div>
-                </div>
-
-                <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2.5 text-left space-y-1.5 text-[9.5px] print:text-[9px] text-slate-900 my-1">
-                  <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
-                    <span className="text-sm">🎙️</span>
-                    <span>Voice Notes in Hausa, Yoruba, Igbo &amp; English</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
-                    <span className="text-sm">📸</span>
-                    <span>Snap Photo of Empty Blister Pack or Rx Paper</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
-                    <span className="text-sm">🚚</span>
-                    <span>28-Day Refill Timers &amp; Fast Doorstep Delivery</span>
-                  </div>
-                </div>
-
-                <div className="py-1">
-                  {qrDataUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={qrDataUrl}
-                      alt="Bag QR"
-                      className="w-28 h-28 sm:w-32 sm:h-32 print:w-32 print:h-32 mx-auto border-2 border-slate-900 rounded-2xl p-1 bg-white shadow-md"
-                    />
-                  ) : (
-                    <div className="w-32 h-32 mx-auto border-2 border-slate-300 rounded-2xl flex items-center justify-center text-[10px] text-slate-400">
-                      Generating QR...
-                    </div>
-                  )}
-                  <div className="text-[10px] print:text-[9.5px] font-black uppercase tracking-wider text-emerald-900 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 inline-block mt-1">
-                    📲 Scan with WhatsApp Camera
-                  </div>
-                </div>
-
-                <div className="text-[8px] print:text-[7.5px] text-slate-600 border-t border-slate-200 pt-1 font-semibold space-y-0.5">
-                  <div className="flex items-center justify-between">
-                    <span>✓ 100% Free Patient Concierge</span>
-                    <span>Keep with your medications</span>
-                  </div>
-                  <div className="text-[7.5px] print:text-[7px] text-slate-400 font-medium flex items-center justify-between pt-0.5 border-t border-dashed border-slate-200">
-                    <span>⚡ Powered by <strong>RetainNG AI</strong></span>
-                    <span>Hotline: <strong>+234 916 915 3129</strong></span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </main>
 
-      {/* QR Code Modal for Stand */}
+      {/* QR Code Modal for Stand & 4-in-1 Counter Slips */}
       <QrCodeModal
         isOpen={qrOpen}
         onClose={() => setQrOpen(false)}
         initialShowPrintCard={printMode}
+        autoPrint={isPrintParam}
         business={business}
       />
     </div>

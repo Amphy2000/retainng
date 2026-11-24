@@ -23,13 +23,6 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Screen hide for native portal slips container */
-@media screen {
-  .portal-native-slips {
-    display: none !important;
-  }
-}
-
 /* ==========================================================================
    STRICT A4 PRINT STYLESHEET (100% 1-PAGE ISOLATION FOR BAG SLIPS)
    ========================================================================== */
@@ -40,19 +33,14 @@ body {
   footer,
   aside,
   #app-shell-main,
+  #public-shell > div > header,
+  #public-shell > div > main,
   .portal-screen-content,
   .print-hidden,
   button,
   input,
   select {
     display: none !important;
-  }
-
-  .portal-native-slips {
-    display: block !important;
-    width: 200mm !important;
-    margin: 0 auto !important;
-    padding: 0 !important;
   }
 
   /* 2. Page Setup: Exact A4 Portrait */
@@ -138,8 +126,8 @@ body {
   }
 
   .a4-slip-item img {
-    max-height: 36mm !important;
-    max-width: 36mm !important;
+    max-height: 48mm !important;
+    max-width: 48mm !important;
     object-fit: contain !important;
   }
 

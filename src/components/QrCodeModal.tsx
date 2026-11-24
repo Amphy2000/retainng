@@ -11,10 +11,11 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   initialShowPrintCard?: boolean;
+  autoPrint?: boolean;
   business?: Business | null;
 }
 
-export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, business: propBusiness }: Props) {
+export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, autoPrint = false, business: propBusiness }: Props) {
   const [business, setBusiness] = useState<Business | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
@@ -152,6 +153,16 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, bus
     }, 0);
     return () => clearTimeout(timer);
   }, [isOpen, qrMode, initialShowPrintCard, propBusiness]);
+
+  // Auto-trigger print if requested (e.g. from ?print=1)
+  useEffect(() => {
+    if (autoPrint && isOpen && qrDataUrl && showPrintCard) {
+      const timer = setTimeout(() => {
+        window.print();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [autoPrint, isOpen, qrDataUrl, showPrintCard]);
 
   const activeBusinessToUse = propBusiness || business || getActiveBusiness();
   if (!isOpen || !activeBusinessToUse) return null;
@@ -355,38 +366,38 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, bus
                 {[1, 2, 3, 4].map((slip) => (
                   <div
                     key={slip}
-                    className="a4-slip-item border-2 border-dashed border-slate-400 rounded-2xl p-4 bg-white text-center flex flex-col justify-between"
+                    className="a4-slip-item border-2 border-dashed border-slate-900 rounded-2xl p-4 bg-white text-center flex flex-col justify-between"
                   >
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[9px] print:text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wider border-b border-dashed border-slate-300 pb-1">
+                      <div className="flex items-center justify-between text-[10px] print:text-[9.5px] text-slate-500 font-black uppercase tracking-wider border-b border-dashed border-slate-300 pb-1">
                         <span>✂ Cut Line</span>
                         <span>VIP Prescription Slip</span>
                       </div>
-                      <div className="text-sm sm:text-base font-black uppercase tracking-tight text-slate-950 truncate pt-0.5">
+                      <div className="text-base sm:text-lg font-black uppercase tracking-tight text-slate-950 truncate pt-0.5">
                         {currentBusiness.name}
                       </div>
-                      <div className="text-[10px] font-extrabold text-emerald-950 bg-emerald-100/90 px-3 py-0.5 rounded-full border border-emerald-300 inline-block shadow-2xs">
+                      <div className="text-[11px] font-black text-emerald-950 bg-emerald-100/90 px-3.5 py-0.5 rounded-full border border-emerald-300 inline-block shadow-2xs">
                         {customBadge}
                       </div>
                     </div>
 
                     {currentBusiness.business_type === 'pharmacy' || currentBusiness.name.toLowerCase().includes('pharm') ? (
-                      <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2.5 text-left space-y-1.5 text-[9.5px] print:text-[9px] text-slate-900 my-1">
-                        <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
-                          <span className="text-sm">🎙️</span>
+                      <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3 text-left space-y-1.5 text-[10.5px] print:text-[10px] text-slate-900 my-1">
+                        <div className="flex items-center gap-2 font-black text-emerald-950">
+                          <span className="text-base">🎙️</span>
                           <span>Voice Notes in Hausa, Yoruba, Igbo &amp; English</span>
                         </div>
-                        <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
-                          <span className="text-sm">📸</span>
+                        <div className="flex items-center gap-2 font-black text-emerald-950">
+                          <span className="text-base">📸</span>
                           <span>Snap Photo of Empty Blister Pack or Rx Paper</span>
                         </div>
-                        <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
-                          <span className="text-sm">🚚</span>
+                        <div className="flex items-center gap-2 font-black text-emerald-950">
+                          <span className="text-base">🚚</span>
                           <span>28-Day Refill Timers &amp; Fast Doorstep Delivery</span>
                         </div>
                       </div>
                     ) : (
-                      <p className="text-[10px] text-slate-800 leading-normal font-semibold px-2 my-1">
+                      <p className="text-[11px] text-slate-800 leading-normal font-semibold px-2 my-1">
                         {customOfferText}
                       </p>
                     )}
@@ -397,20 +408,20 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, bus
                         <img
                           src={qrDataUrl}
                           alt="Bag QR"
-                          className="w-28 h-28 sm:w-32 sm:h-32 print:w-32 print:h-32 mx-auto border-2 border-slate-900 rounded-2xl p-1 bg-white shadow-md"
+                          className="w-36 h-36 sm:w-40 sm:h-40 print:w-44 print:h-44 mx-auto border-2 border-slate-900 rounded-2xl p-1 bg-white shadow-md"
                         />
                       )}
-                      <div className="text-[10px] print:text-[9.5px] font-black uppercase tracking-wider text-emerald-900 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 inline-block mt-1">
+                      <div className="text-[11.5px] print:text-[11px] font-black uppercase tracking-wider text-emerald-900 bg-emerald-50 px-3 py-1 rounded-md border border-emerald-200 inline-block mt-1">
                         📲 Scan with WhatsApp Camera
                       </div>
                     </div>
 
-                    <div className="text-[8px] print:text-[7.5px] text-slate-600 border-t border-slate-200 pt-1 font-semibold space-y-0.5">
+                    <div className="text-[9px] print:text-[8.5px] text-slate-700 border-t border-slate-200 pt-1 font-bold space-y-0.5">
                       <div className="flex items-center justify-between">
                         <span>✓ 100% Free Patient Concierge</span>
                         <span>Keep with your medications</span>
                       </div>
-                      <div className="text-[7.5px] print:text-[7px] text-slate-400 font-medium flex items-center justify-between pt-0.5 border-t border-dashed border-slate-200">
+                      <div className="text-[8.5px] print:text-[8px] text-slate-500 font-semibold flex items-center justify-between pt-0.5 border-t border-dashed border-slate-200">
                         <span>⚡ Powered by <strong>RetainNG AI</strong></span>
                         <span>Hotline: <strong>+234 916 915 3129</strong></span>
                       </div>
