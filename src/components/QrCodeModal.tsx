@@ -93,9 +93,19 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, bus
   }
 
   useEffect(() => {
+    if (initialShowPrintCard) {
+      setShowPrintCard(true);
+      setPrintLayout('bag_slips');
+    }
+  }, [initialShowPrintCard]);
+
+  useEffect(() => {
     if (!isOpen) return;
     const timer = setTimeout(() => {
-      setShowPrintCard(initialShowPrintCard);
+      if (initialShowPrintCard) {
+        setShowPrintCard(true);
+        setPrintLayout('bag_slips');
+      }
       const biz = propBusiness || getActiveBusiness();
       setBusiness(biz);
 
@@ -141,9 +151,11 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, bus
       );
     }, 0);
     return () => clearTimeout(timer);
-  }, [isOpen, qrMode, initialShowPrintCard]);
+  }, [isOpen, qrMode, initialShowPrintCard, propBusiness]);
 
-  if (!isOpen || !business) return null;
+  const activeBusinessToUse = propBusiness || business || getActiveBusiness();
+  if (!isOpen || !activeBusinessToUse) return null;
+  const currentBusiness = activeBusinessToUse;
 
   function handleCopy() {
     navigator.clipboard.writeText(optInUrl);
@@ -209,233 +221,234 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, bus
         </div>
 
         {/* Content */}
-        {showPrintCard ? (
-          <div className="p-4 sm:p-5 text-center space-y-3.5 overflow-y-auto flex-1 print:p-0 print:overflow-visible">
-            {/* Print Format Toggle: Stand vs Bag Slips */}
-            <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold print:hidden">
-              <button
-                type="button"
-                onClick={() => setPrintLayout('stand')}
-                className={`flex-1 py-1.5 rounded-lg transition cursor-pointer ${
-                  printLayout === 'stand' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                🪧 Counter Stand (Table Tent)
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintLayout('bag_slips')}
-                className={`flex-1 py-1.5 rounded-lg transition cursor-pointer ${
-                  printLayout === 'bag_slips' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-emerald-700'
-                }`}
-              >
-                📄 Bag Slips (4-in-1 A4 Page)
-              </button>
+        <div className={`p-4 sm:p-5 text-center space-y-3.5 overflow-y-auto flex-1 print:p-0 print:overflow-visible ${showPrintCard ? 'block' : 'hidden print:block'}`}>
+          {/* Print Format Toggle: Stand vs Bag Slips */}
+          <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold print:hidden">
+            <button
+              type="button"
+              onClick={() => setPrintLayout('stand')}
+              className={`flex-1 py-1.5 rounded-lg transition cursor-pointer ${
+                printLayout === 'stand' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🪧 Counter Stand (Table Tent)
+            </button>
+            <button
+              type="button"
+              onClick={() => setPrintLayout('bag_slips')}
+              className={`flex-1 py-1.5 rounded-lg transition cursor-pointer ${
+                printLayout === 'bag_slips' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-emerald-700'
+              }`}
+            >
+              📄 Bag Slips (4-in-1 A4 Page)
+            </button>
+          </div>
+
+          {/* Customizable Incentive Hook Bar */}
+          <div className="text-left space-y-2 bg-slate-50 p-3 rounded-2xl border border-slate-200 print:hidden">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block">
+              Choose Customer Hook (No discount required!):
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                ...(currentBusiness.business_type === 'pharmacy' || currentBusiness.name.toLowerCase().includes('pharm')
+                  ? [
+                      { id: 'pharm_universal', label: '🎁 Universal VIP Pass' },
+                      { id: 'pharm_bp_voucher', label: '🩺 Free BP/Sugar Check' },
+                      { id: 'pharm_refill', label: '💊 Refill Reminders' },
+                      { id: 'pharm_delivery', label: '🛵 Home Delivery' },
+                      { id: 'pharm_care', label: '🩺 Clinical Care' },
+                    ]
+                  : []),
+                { id: 'free_perk', label: '🎁 Free Treatment Perk' },
+                { id: 'wifi', label: '📶 Free Wi-Fi' },
+                { id: 'vip', label: '⭐ VIP Priority' },
+                { id: 'receipt', label: '🧾 Digital Receipt' },
+                { id: 'discount', label: '🏷️ ₦500 Discount' },
+                { id: 'custom', label: '✏️ Custom' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() =>
+                    applyIncentivePreset(
+                      item.id as
+                        | 'free_perk'
+                        | 'wifi'
+                        | 'vip'
+                        | 'discount'
+                        | 'receipt'
+                        | 'pharm_refill'
+                        | 'pharm_delivery'
+                        | 'pharm_care'
+                        | 'custom'
+                    )
+                  }
+                  className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition cursor-pointer ${
+                    incentiveType === item.id
+                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                      : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
 
-            {/* Customizable Incentive Hook Bar */}
-            <div className="text-left space-y-2 bg-slate-50 p-3 rounded-2xl border border-slate-200 print:hidden">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 block">
-                Choose Customer Hook (No discount required!):
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  ...(business.business_type === 'pharmacy' || business.name.toLowerCase().includes('pharm')
-                    ? [
-                        { id: 'pharm_universal', label: '🎁 Universal VIP Pass' },
-                        { id: 'pharm_bp_voucher', label: '🩺 Free BP/Sugar Check' },
-                        { id: 'pharm_refill', label: '💊 Refill Reminders' },
-                        { id: 'pharm_delivery', label: '🛵 Home Delivery' },
-                        { id: 'pharm_care', label: '🩺 Clinical Care' },
-                      ]
-                    : []),
-                  { id: 'free_perk', label: '🎁 Free Treatment Perk' },
-                  { id: 'wifi', label: '📶 Free Wi-Fi' },
-                  { id: 'vip', label: '⭐ VIP Priority' },
-                  { id: 'receipt', label: '🧾 Digital Receipt' },
-                  { id: 'discount', label: '🏷️ ₦500 Discount' },
-                  { id: 'custom', label: '✏️ Custom' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() =>
-                      applyIncentivePreset(
-                        item.id as
-                          | 'free_perk'
-                          | 'wifi'
-                          | 'vip'
-                          | 'discount'
-                          | 'receipt'
-                          | 'pharm_refill'
-                          | 'pharm_delivery'
-                          | 'pharm_care'
-                          | 'custom'
-                      )
-                    }
-                    className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition cursor-pointer ${
-                      incentiveType === item.id
-                        ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                        : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Custom Input */}
-              <div className="pt-1">
-                <input
-                  type="text"
-                  value={customOfferText}
-                  onChange={(e) => setCustomOfferText(e.target.value)}
-                  placeholder="Custom offer or hook text..."
-                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                />
-              </div>
-            </div>
-
-            {/* The Actual Printable Canvas */}
-            {printLayout === 'stand' ? (
-              <div className="a4-stand-card border-4 border-slate-900 rounded-3xl p-5 bg-white shadow-lg space-y-2.5 print:border-black print:shadow-none">
-                <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-black text-base flex items-center justify-center mx-auto">
-                  ₦
-                </div>
-                <h2 className="text-base sm:text-lg font-black uppercase tracking-tight text-slate-900">
-                  {business.name}
-                </h2>
-                <div className="py-0.5 px-3 bg-emerald-50 rounded-full inline-block border border-emerald-200">
-                  <span className="text-[11px] font-bold text-emerald-800">
-                    {customBadge}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-700 max-w-xs mx-auto font-medium leading-relaxed">
-                  {customOfferText}
-                </p>
-
-                {/* QR Code */}
-                <div className="p-2.5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl inline-block">
-                  {qrDataUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={qrDataUrl}
-                      alt={`Counter QR for ${business.name}`}
-                      className="w-40 h-40 sm:w-44 sm:h-44 mx-auto"
-                    />
-                  )}
-                </div>
-
-                <div className="text-[10px] text-slate-500 font-medium space-y-1">
-                  <div>Point phone camera here • No app download required</div>
-                  <div className="pt-2 border-t border-slate-200 text-[9px] text-slate-400 font-semibold flex items-center justify-between">
-                    <span>⚡ Powered by <strong>RetainNG AI</strong></span>
-                    <span>Want this for your business? Call/WhatsApp: <strong>+234 916 915 3129</strong></span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* 4-per-A4 Bag Slips Layout */
-              <div className="space-y-2">
-                <p className="text-[11px] text-slate-500 font-medium text-left print:hidden">
-                  ✂️ <strong>Prescription Bag Slips:</strong> Print and cut into 4 slips. Staff simply drops one slip into the patient&apos;s medicine bag at checkout. Zero staff typing!
-                </p>
-                <div className="a4-printable-slips grid grid-cols-2 gap-3 p-1 rounded-2xl bg-white print:p-0">
-                  {[1, 2, 3, 4].map((slip) => (
-                    <div
-                      key={slip}
-                      className="a4-slip-item border-2 border-dashed border-slate-400 rounded-2xl p-4 bg-white text-center flex flex-col justify-between"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-[9px] print:text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wider border-b border-dashed border-slate-300 pb-1">
-                          <span>✂ Cut Line</span>
-                          <span>VIP Prescription Slip</span>
-                        </div>
-                        <div className="text-sm sm:text-base font-black uppercase tracking-tight text-slate-950 truncate pt-0.5">
-                          {business.name}
-                        </div>
-                        <div className="text-[10px] font-extrabold text-emerald-950 bg-emerald-100/90 px-3 py-0.5 rounded-full border border-emerald-300 inline-block shadow-2xs">
-                          {customBadge}
-                        </div>
-                      </div>
-
-                      {business.business_type === 'pharmacy' || business.name.toLowerCase().includes('pharm') ? (
-                        <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2.5 text-left space-y-1.5 text-[9.5px] print:text-[9px] text-slate-900 my-1">
-                          <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
-                            <span className="text-sm">🎙️</span>
-                            <span>Voice Notes in Hausa, Yoruba, Igbo &amp; English</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
-                            <span className="text-sm">📸</span>
-                            <span>Snap Photo of Empty Blister Pack or Rx Paper</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
-                            <span className="text-sm">🚚</span>
-                            <span>28-Day Refill Timers &amp; Fast Doorstep Delivery</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-[10px] text-slate-800 leading-normal font-semibold px-2 my-1">
-                          {customOfferText}
-                        </p>
-                      )}
-
-                      <div className="py-1">
-                        {qrDataUrl && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={qrDataUrl}
-                            alt="Bag QR"
-                            className="w-28 h-28 sm:w-32 sm:h-32 print:w-32 print:h-32 mx-auto border-2 border-slate-900 rounded-2xl p-1 bg-white shadow-md"
-                          />
-                        )}
-                        <div className="text-[10px] print:text-[9.5px] font-black uppercase tracking-wider text-emerald-900 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 inline-block mt-1">
-                          📲 Scan with WhatsApp Camera
-                        </div>
-                      </div>
-
-                      <div className="text-[8px] print:text-[7.5px] text-slate-600 border-t border-slate-200 pt-1 font-semibold space-y-0.5">
-                        <div className="flex items-center justify-between">
-                          <span>✓ 100% Free Patient Concierge</span>
-                          <span>Keep with your medications</span>
-                        </div>
-                        <div className="text-[7.5px] print:text-[7px] text-slate-400 font-medium flex items-center justify-between pt-0.5 border-t border-dashed border-slate-200">
-                          <span>⚡ Powered by <strong>RetainNG AI</strong></span>
-                          <span>Hotline: <strong>+234 916 915 3129</strong></span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-1 print:hidden">
-              <button
-                type="button"
-                onClick={() => setShowPrintCard(false)}
-                className="flex-1 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
-              >
-                Back to QR Details
-              </button>
-              <button
-                type="button"
-                onClick={handlePrint}
-                className="flex-1 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-4 h-4" />
-                <span>{printLayout === 'stand' ? 'Print Stand Card' : 'Print 4 Bag Slips'}</span>
-              </button>
+            {/* Custom Input */}
+            <div className="pt-1">
+              <input
+                type="text"
+                value={customOfferText}
+                onChange={(e) => setCustomOfferText(e.target.value)}
+                placeholder="Custom offer or hook text..."
+                className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+              />
             </div>
           </div>
-        ) : (
-          <div className="p-4 sm:p-5 text-center space-y-3.5 overflow-y-auto flex-1">
+
+          {/* The Actual Printable Canvas */}
+          {printLayout === 'stand' ? (
+            <div className="a4-stand-card border-4 border-slate-900 rounded-3xl p-5 bg-white shadow-lg space-y-2.5 print:border-black print:shadow-none">
+              <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-black text-base flex items-center justify-center mx-auto">
+                ₦
+              </div>
+              <h2 className="text-base sm:text-lg font-black uppercase tracking-tight text-slate-900">
+                {currentBusiness.name}
+              </h2>
+              <div className="py-0.5 px-3 bg-emerald-50 rounded-full inline-block border border-emerald-200">
+                <span className="text-[11px] font-bold text-emerald-800">
+                  {customBadge}
+                </span>
+              </div>
+              <p className="text-xs text-slate-700 max-w-xs mx-auto font-medium leading-relaxed">
+                {customOfferText}
+              </p>
+
+              {/* QR Code */}
+              <div className="p-2.5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl inline-block">
+                {qrDataUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={qrDataUrl}
+                    alt={`Counter QR for ${currentBusiness.name}`}
+                    className="w-40 h-40 sm:w-44 sm:h-44 mx-auto"
+                  />
+                )}
+              </div>
+
+              <div className="text-[10px] text-slate-500 font-medium space-y-1">
+                <div>Point phone camera here • No app download required</div>
+                <div className="pt-2 border-t border-slate-200 text-[9px] text-slate-400 font-semibold flex items-center justify-between">
+                  <span>⚡ Powered by <strong>RetainNG AI</strong></span>
+                  <span>Want this for your business? Call/WhatsApp: <strong>+234 916 915 3129</strong></span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* 4-per-A4 Bag Slips Layout */
+            <div className="space-y-2">
+              <p className="text-[11px] text-slate-500 font-medium text-left print:hidden">
+                ✂️ <strong>Prescription Bag Slips:</strong> Print and cut into 4 slips. Staff simply drops one slip into the patient&apos;s medicine bag at checkout. Zero staff typing!
+              </p>
+              <div className="a4-printable-slips grid grid-cols-2 gap-3 p-1 rounded-2xl bg-white print:p-0">
+                {[1, 2, 3, 4].map((slip) => (
+                  <div
+                    key={slip}
+                    className="a4-slip-item border-2 border-dashed border-slate-400 rounded-2xl p-4 bg-white text-center flex flex-col justify-between"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[9px] print:text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wider border-b border-dashed border-slate-300 pb-1">
+                        <span>✂ Cut Line</span>
+                        <span>VIP Prescription Slip</span>
+                      </div>
+                      <div className="text-sm sm:text-base font-black uppercase tracking-tight text-slate-950 truncate pt-0.5">
+                        {currentBusiness.name}
+                      </div>
+                      <div className="text-[10px] font-extrabold text-emerald-950 bg-emerald-100/90 px-3 py-0.5 rounded-full border border-emerald-300 inline-block shadow-2xs">
+                        {customBadge}
+                      </div>
+                    </div>
+
+                    {currentBusiness.business_type === 'pharmacy' || currentBusiness.name.toLowerCase().includes('pharm') ? (
+                      <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2.5 text-left space-y-1.5 text-[9.5px] print:text-[9px] text-slate-900 my-1">
+                        <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
+                          <span className="text-sm">🎙️</span>
+                          <span>Voice Notes in Hausa, Yoruba, Igbo &amp; English</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
+                          <span className="text-sm">📸</span>
+                          <span>Snap Photo of Empty Blister Pack or Rx Paper</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
+                          <span className="text-sm">🚚</span>
+                          <span>28-Day Refill Timers &amp; Fast Doorstep Delivery</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-800 leading-normal font-semibold px-2 my-1">
+                        {customOfferText}
+                      </p>
+                    )}
+
+                    <div className="py-1">
+                      {qrDataUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={qrDataUrl}
+                          alt="Bag QR"
+                          className="w-28 h-28 sm:w-32 sm:h-32 print:w-32 print:h-32 mx-auto border-2 border-slate-900 rounded-2xl p-1 bg-white shadow-md"
+                        />
+                      )}
+                      <div className="text-[10px] print:text-[9.5px] font-black uppercase tracking-wider text-emerald-900 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 inline-block mt-1">
+                        📲 Scan with WhatsApp Camera
+                      </div>
+                    </div>
+
+                    <div className="text-[8px] print:text-[7.5px] text-slate-600 border-t border-slate-200 pt-1 font-semibold space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span>✓ 100% Free Patient Concierge</span>
+                        <span>Keep with your medications</span>
+                      </div>
+                      <div className="text-[7.5px] print:text-[7px] text-slate-400 font-medium flex items-center justify-between pt-0.5 border-t border-dashed border-slate-200">
+                        <span>⚡ Powered by <strong>RetainNG AI</strong></span>
+                        <span>Hotline: <strong>+234 916 915 3129</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1 print:hidden">
+            <button
+              type="button"
+              onClick={() => setShowPrintCard(false)}
+              className="flex-1 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+            >
+              Back to QR Details
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="flex-1 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Printer className="w-4 h-4" />
+              <span>{printLayout === 'stand' ? 'Print Stand Card' : 'Print 4 Bag Slips'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ━━ SCREEN QR DETAILS (Only shown on screen when showPrintCard=false; strictly hidden during print) ━━ */}
+        {!showPrintCard && (
+          <div className="p-4 sm:p-5 text-center space-y-3.5 overflow-y-auto flex-1 print:hidden">
             <div className="bg-slate-50 border-2 border-dashed border-emerald-500/40 p-2.5 rounded-2xl inline-block shadow-inner mx-auto">
               {qrDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={qrDataUrl}
-                  alt={`Opt-in QR for ${business.name}`}
+                  alt={`Opt-in QR for ${currentBusiness.name}`}
                   className="w-44 h-44 sm:w-48 sm:h-48 mx-auto rounded-xl shadow-xs"
                 />
               ) : (
@@ -446,7 +459,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, bus
             </div>
 
             <div>
-              <h4 className="text-sm sm:text-base font-bold text-slate-900">{business.name}</h4>
+              <h4 className="text-sm sm:text-base font-bold text-slate-900">{currentBusiness.name}</h4>
               <p className="text-[11px] text-slate-500 max-w-xs mx-auto mt-0.5">
                 Customers scan to self-register and consent to receive appointment reminders and offers.
               </p>
@@ -471,7 +484,7 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, bus
 
             <div className="grid grid-cols-2 gap-2 pt-0.5">
               <Link
-                href={`/opt-in/${business.opt_in_slug}`}
+                href={`/opt-in/${currentBusiness.opt_in_slug}`}
                 target="_blank"
                 className="py-2 px-3 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center justify-center gap-1.5 transition"
               >
@@ -480,11 +493,15 @@ export function QrCodeModal({ isOpen, onClose, initialShowPrintCard = false, bus
               </Link>
 
               <button
-                onClick={() => setShowPrintCard(true)}
+                type="button"
+                onClick={() => {
+                  setShowPrintCard(true);
+                  setPrintLayout('bag_slips');
+                }}
                 className="py-2 px-3 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>Print Stand Card</span>
+                <span>Print Stand / Slips</span>
               </button>
             </div>
 

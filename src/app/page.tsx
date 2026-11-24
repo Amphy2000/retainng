@@ -48,6 +48,25 @@ const BIZ_ICONS: Record<string, string> = {
   other: '🏪',
 };
 
+function formatExactDateTime(isoString?: string): string {
+  if (!isoString) return 'Just now';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return 'Recently';
+  const now = new Date();
+  const isToday = now.toDateString() === d.toDateString();
+  const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  if (isToday) {
+    return `Today • ${timeStr}`;
+  }
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  if (yesterday.toDateString() === d.toDateString()) {
+    return `Yesterday • ${timeStr}`;
+  }
+  const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${dateStr} • ${timeStr}`;
+}
+
 export default function AgencyRadarPage() {
   const { openQrModal, refreshData } = useApp();
   const mounted = useIsMounted();
@@ -219,7 +238,7 @@ export default function AgencyRadarPage() {
           recipient: `${s.customer_name || 'Customer'} (${s.customer_phone || ''})`,
           detail: s.notes || (s.amount_ngn ? `Processed refill order for ₦${s.amount_ngn.toLocaleString()}` : 'Automated WhatsApp coordination executed.'),
           rawDate: dateStr,
-          timestamp: formatRelativeTime(dateStr),
+          timestamp: formatExactDateTime(dateStr),
           badgeColor,
           badgeText,
         });
@@ -237,7 +256,7 @@ export default function AgencyRadarPage() {
           recipient: `${c.full_name || 'Patient'} (${c.phone || ''})`,
           detail: `Patient scanned counter bag slip at checkout. Subscribed for WhatsApp refill timers. Language: ${langTag}.`,
           rawDate: dateStr,
-          timestamp: formatRelativeTime(dateStr),
+          timestamp: formatExactDateTime(dateStr),
           badgeColor: 'purple',
           badgeText: 'QR Bag Scan',
         });

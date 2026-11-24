@@ -31,18 +31,39 @@ function PortalInner() {
   const searchParams = useSearchParams();
   const slug = params?.slug as string;
 
+  const isPrintParam = searchParams.get('print') === '1' || searchParams.get('print') === 'true';
   const [business, setBusiness] = useState<Business | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [sales, setSales] = useState<SaleOrVisit[]>([]);
   const [loading, setLoading] = useState(true);
 
   // QR Modal
-  const [qrOpen, setQrOpen] = useState(false);
-  const [printMode, setPrintMode] = useState(false);
+  const [qrOpen, setQrOpen] = useState(isPrintParam);
+  const [printMode, setPrintMode] = useState(isPrintParam);
 
   function reloadData(bizId: string) {
     setCustomers(getCustomers(bizId));
     setSales(getSales(bizId));
+  }
+
+  // Exact timestamp formatter (e.g. "Today • 12:02 PM" or "Nov 24 • 12:02 PM")
+  function formatExactDateTime(isoString?: string): string {
+    if (!isoString) return 'Just now';
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return 'Recently';
+    const now = new Date();
+    const isToday = now.toDateString() === d.toDateString();
+    const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    if (isToday) {
+      return `Today • ${timeStr}`;
+    }
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    if (yesterday.toDateString() === d.toDateString()) {
+      return `Yesterday • ${timeStr}`;
+    }
+    const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `${dateStr} • ${timeStr}`;
   }
 
   // Handle URL query for direct print mode (?print=1 or ?print=true)
@@ -299,21 +320,21 @@ function PortalInner() {
               No recent customer activity. New scans via bag slips will automatically appear here!
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
               {recentVisits.map((v) => (
-                <div key={v.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center">
+                <div key={v.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100/60 transition">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
                       {v.customer_name?.charAt(0) || 'C'}
                     </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-900">{v.customer_name}</div>
-                      <div className="text-[10px] text-slate-500">{v.service_or_product || 'Regular Refill'}</div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-900 truncate">{v.customer_name}</div>
+                      <div className="text-[10px] text-slate-500 truncate">{v.service_or_product || 'Regular Refill'}</div>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 ml-2">
                     <span
-                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full block ${
+                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full inline-block ${
                         v.badgeColor === 'blue'
                           ? 'text-blue-700 bg-blue-100 border border-blue-200'
                           : 'text-emerald-700 bg-emerald-100 border border-emerald-200'
@@ -321,8 +342,8 @@ function PortalInner() {
                     >
                       {v.badgeText}
                     </span>
-                    <span className="text-[10px] text-slate-400 font-medium mt-0.5 block">
-                      {formatRelativeTime(v.created_at)}
+                    <span className="text-[10px] text-slate-500 font-semibold mt-0.5 block">
+                      {formatExactDateTime(v.created_at)}
                     </span>
                   </div>
                 </div>
