@@ -285,16 +285,16 @@ The patient's new message is directly replying to the conversation history above
     ],
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 600,
+      maxOutputTokens: 2048,
     },
   };
 
   // 3. Robust multi-model fallback chain (Active Verified Google Gemini Models)
   const MODELS_TO_TRY = [
-    'gemini-1.5-flash',
-    'gemini-2.0-flash-exp',
-    'gemini-1.5-flash-8b',
-    'gemini-1.5-pro',
+    'gemini-2.5-flash',
+    'gemini-flash-latest',
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-pro',
   ];
 
   for (const model of MODELS_TO_TRY) {
@@ -912,6 +912,11 @@ export async function POST(req: NextRequest) {
     } else {
       const json = await req.json();
 
+      // Ignore Green-API outgoing message echoes, status updates, and non-incoming webhooks
+      if (json?.typeWebhook && json.typeWebhook !== 'incomingMessageReceived') {
+        return NextResponse.json({ ignored: `webhook-type:${json.typeWebhook}` });
+      }
+
       fromNumber =
         json?.From ||
         json?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from ||
@@ -920,6 +925,17 @@ export async function POST(req: NextRequest) {
         json?.messages?.[0]?.from ||
         json?.data?.from ||
         '';
+
+      // Ignore WhatsApp Groups (@g.us), Status Broadcasts, and Channels/Newsletters
+      const rawChatId = String(json?.senderData?.chatId || fromNumber || '').toLowerCase();
+      if (
+        rawChatId.includes('@g.us') ||
+        rawChatId.includes('status@broadcast') ||
+        rawChatId.includes('@newsletter') ||
+        rawChatId.includes('@broadcast')
+      ) {
+        return NextResponse.json({ ignored: 'group-or-broadcast-message' });
+      }
 
       messageBody =
         json?.Body ||
@@ -1488,16 +1504,22 @@ export async function GET() {
 
   if (geminiApiKey) {
     try {
-      const listRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`
+      const testRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: 'Reply in Hausa: Sannu, muna da Metformin.' }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
+          }),
+        }
       );
-      const listData = await listRes.json();
-      const modelNames = listData?.models ? listData.models.map((m: { name: string }) => m.name) : [];
+      const data = await testRes.json();
       geminiTestResult = {
         ...geminiTestResult,
-        list_status: listRes.status,
-        available_models: modelNames.slice(0, 15),
-        raw_list: modelNames.length === 0 ? listData : undefined,
+        status: testRes.status,
+        reply: data?.candidates?.[0]?.content?.parts?.[0]?.text || data,
       };
     } catch (err: unknown) {
       geminiTestResult = {
