@@ -1063,7 +1063,7 @@ export async function POST(req: NextRequest) {
 
     // --- Multi-Business attribution resolution ---
     const refMatch = messageBody.match(/\[ref:([a-zA-Z0-9_-]+)\]/i);
-    let resolvedBiz = resolveBusiness(refMatch ? refMatch[1] : messageBody);
+    let resolvedBiz = refMatch ? resolveBusiness(refMatch[1]) : null;
 
     // If not found in static list, check dynamic Supabase businesses
     if (!resolvedBiz && refMatch && supabaseAdmin) {
@@ -1085,8 +1085,8 @@ export async function POST(req: NextRequest) {
         console.warn('Dynamic business lookup error:', err);
       }
     }
-    const activeSlug = resolvedBiz?.slug || (refMatch ? refMatch[1] : 'general');
-    const activeBizName = resolvedBiz?.name || (refMatch ? refMatch[1] : null);
+    let activeSlug = resolvedBiz?.slug || (refMatch ? refMatch[1] : 'general');
+    let activeBizName = resolvedBiz?.name || (refMatch ? refMatch[1] : null);
 
     // If first-time scan with [ref:...]
     if (refMatch) {
@@ -1174,10 +1174,34 @@ export async function POST(req: NextRequest) {
             .map((v) => v.service_or_product)
             .filter((p) => !p.includes('Dispatched') && !p.includes('Test'))
             .join(', ');
+
+          // Resolve attributed pharmacy from customer's registered business_id
+          if (cData.business_id) {
+            const { data: bizRow } = await supabaseAdmin
+              .from('businesses')
+              .select('opt_in_slug, name, business_type, city')
+              .eq('id', cData.business_id)
+              .maybeSingle();
+            if (bizRow) {
+              activeSlug = bizRow.opt_in_slug;
+              activeBizName = bizRow.name;
+              resolvedBiz = {
+                slug: bizRow.opt_in_slug,
+                name: bizRow.name,
+                type: bizRow.business_type || 'pharmacy',
+                location: bizRow.city || 'Kaduna',
+              };
+            }
+          }
         }
       } catch (memErr) {
         console.warn('Patient memory lookup error:', memErr);
       }
+    }
+
+    // STRICT OPT-IN GATE: Never auto-reply to personal DMs from friends/contacts who haven't enrolled via QR/link
+    if (!customerRecord) {
+      return NextResponse.json({ ignored: 'personal-dm-not-enrolled-patient', phone: cleanPhone });
     }
 
     const patientMemoryPrompt = `
