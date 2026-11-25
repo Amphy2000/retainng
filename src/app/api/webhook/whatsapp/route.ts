@@ -430,16 +430,24 @@ function detectIntentKeywords(msg: string, preferredDialect?: string): string {
     return `You're very welcome! Wishing you great health and quick recovery always. If you ever need advice or a refill, we're always right here for you! 😊\nLANG: en`;
   }
 
-  // 5. INQUIRIES ("Do you have", "What of", "Kuna da", "?")
+  // 5. DRUG/STOCK INQUIRIES ("Do you have X", "What of Metformin", "Kuna da")
+  // Note: Generic "?" alone is NOT enough — must include drug/health context to avoid false positives
+  const hasDrugContext =
+    lower.includes('metformin') || lower.includes('amlodipine') || lower.includes('lisinopril') ||
+    lower.includes('losartan') || lower.includes('drug') || lower.includes('tablet') ||
+    lower.includes('capsule') || lower.includes('medicine') || lower.includes('medication') ||
+    lower.includes('magani') || lower.includes('oogun') || lower.includes('ogwu') ||
+    lower.includes('bp') || lower.includes('blood pressure') || lower.includes('diabetes') ||
+    lower.includes('sugar') || lower.includes('refill');
+
   const isInquiry =
-    lower.includes('do you have') ||
+    (lower.includes('do you have') ||
     lower.includes('what of') ||
     lower.includes('is there') ||
     lower.includes('kuna da') ||
     lower.includes('nawa ne') ||
     lower.includes('how much') ||
-    lower.includes('available') ||
-    lower.includes('?');
+    lower.includes('available')) && hasDrugContext;
 
   if (isInquiry) {
     if (isHausa) {
@@ -1199,9 +1207,37 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // STRICT OPT-IN GATE: Never auto-reply to personal DMs from friends/contacts who haven't enrolled via QR/link
+    // OPT-IN GATE: Don't process personal DMs from non-enrolled contacts
+    // EXCEPTIONS:
+    //   1. Owner/agency numbers can always test the bot (env: AGENCY_OWNER_PHONES, comma-separated)
+    //   2. Anyone who sent a [ref:...] QR scan is already handled above (returned early)
     if (!customerRecord) {
-      return NextResponse.json({ ignored: 'personal-dm-not-enrolled-patient', phone: cleanPhone });
+      // Check if this is the agency owner or a whitelisted tester
+      const ownerPhones = (process.env.AGENCY_OWNER_PHONES || '2349169153129')
+        .split(',')
+        .map((p) => p.replace(/[^0-9]/g, '').trim())
+        .filter(Boolean);
+
+      const isOwner = ownerPhones.includes(cleanPhone);
+
+      if (!isOwner) {
+        // Send a friendly enrollment invite instead of silence
+        const enrollMsg =
+          `👋 Hi! I'm the RetainNG AI health concierge.\n\n` +
+          `To use this service, ask your pharmacist to scan your WhatsApp in at the counter, or scan the QR code on your prescription bag slip.\n\n` +
+          `Are you a pharmacy owner? Send: *JOIN [Pharmacy Name] [City]*`;
+        await sendWhatsApp(cleanPhone, enrollMsg);
+        return NextResponse.json({ success: true, intent: 'enrollment_invitation', phone: cleanPhone });
+      }
+
+      // Owner is testing — build a minimal customer record so the bot responds normally
+      customerRecord = {
+        id: 'owner-test',
+        full_name: profileName || 'Agency Owner',
+        tags: ['Lang:English', 'Owner'],
+        notes: 'Agency owner / developer test account',
+        business_id: '',
+      };
     }
 
     const patientMemoryPrompt = `
@@ -1433,7 +1469,21 @@ LANG: [ha | yo | ig | ar | en]`;
     }
 
     // Send manager dispatch alert for refill orders
-    if (isOrder) {
+    // GUARD: Only fire manager alert if detectedMed is a real medication/item,
+    // NOT a generic keyword-fallback phrase like "Refill Confirmation", "Okay", raw message body of a greeting, etc.
+    const VAGUE_ORDER_PHRASES = [
+      'refill confirmation', 'okay', 'ok', 'yes', 'sure', 'counter pickup',
+      'home delivery', 'delivery', 'pickup', 'voice note message',
+      '[voice note message]', '[photo of medication blister pack or doctor prescription]',
+    ];
+    const medLower = (detectedMed || '').toLowerCase().trim();
+    const isRealOrder =
+      isOrder &&
+      detectedMed &&
+      !VAGUE_ORDER_PHRASES.includes(medLower) &&
+      medLower.length > 3;
+
+    if (isRealOrder) {
       // --- ANTI-CHEAT CHECK: Verify if business subscription is overdue ---
       if (supabaseAdmin && activeSlug) {
         try {
