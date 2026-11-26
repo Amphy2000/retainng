@@ -140,25 +140,34 @@ const GREEN_API_ID = process.env.GREEN_API_ID || '710722811593';
 const GREEN_API_TOKEN = process.env.GREEN_API_TOKEN || 'c7cea54f5c6f4d31a9b74eb6576493a8ec085b4f65a04a62b5';
 const GREEN_API_URL = process.env.GREEN_API_URL || 'https://7107.api.greenapi.com';
 
-/** Look up manager phone for any slug — reads from /api/pharmacy-config with default fallback */
-async function getManagerPhone(slug: string, host: string): Promise<string> {
-  // Built-in default manager numbers (matches settings)
+/** Look up manager phone for any slug — reads directly from Supabase businesses table */
+async function getManagerPhone(slug: string, _host?: string): Promise<string> {
   const defaultManagerPhones: Record<string, string> = {
     'apex-pharmacy': '2349169153129',
     'danfodio-pharmacy': '2349169153129',
   };
 
-  try {
-    const protocol = host.includes('localhost') ? 'http' : 'https';
-    const res = await fetch(`${protocol}://${host}/api/pharmacy-config?slug=${encodeURIComponent(slug)}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.managerPhone) return data.managerPhone.replace(/[^0-9]/g, '');
+  if (supabaseAdmin && slug && slug !== 'general') {
+    try {
+      const { data: b } = await supabaseAdmin
+        .from('businesses')
+        .select('manager_alert_phone, phone')
+        .eq('opt_in_slug', slug)
+        .maybeSingle();
+
+      const raw = b?.manager_alert_phone || b?.phone;
+      if (raw) {
+        let digits = raw.replace(/[^0-9]/g, '');
+        if (digits.startsWith('0') && digits.length === 11) {
+          digits = '234' + digits.slice(1);
+        }
+        if (digits.length >= 10) return digits;
+      }
+    } catch (err) {
+      console.warn('getManagerPhone Supabase lookup error:', err);
     }
-  } catch {
-    // fallback below
   }
-  return defaultManagerPhones[slug] || '2349169153129';
+  return defaultManagerPhones[slug] || process.env.AGENCY_OWNER_PHONES?.split(',')[0]?.replace(/[^0-9]/g, '') || '2349169153129';
 }
 
 async function sendWhatsApp(toPhone: string, message: string): Promise<void> {
@@ -205,134 +214,264 @@ interface ChatTurn {
 // In-memory sliding window of conversation history per phone number (last 6 turns)
 const userConversationHistory: Record<string, ChatTurn[]> = {};
 
+/** Transcribe WhatsApp voice note using Groq Whisper (supports Hausa, Yoruba, Igbo, Pidgin, English) */
+async function transcribeAudioWithGroq(audioData: { base64: string; mimeType: string }): Promise<string | null> {
+  const groqKey = process.env.GROQ_API_KEY || '';
+  if (!groqKey) return null;
+
+  try {
+    const cleanMime = audioData.mimeType.split(';')[0].trim() || 'audio/ogg';
+    const ext = cleanMime.includes('mp4') ? 'm4a' : cleanMime.includes('mpeg') ? 'mp3' : 'ogg';
+    const buffer = Buffer.from(audioData.base64, 'base64');
+    const formData = new FormData();
+    formData.append('file', new Blob([buffer], { type: cleanMime }), `voice.${ext}`);
+    formData.append('model', 'whisper-large-v3-turbo');
+
+    const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${groqKey}` },
+      body: formData,
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!res.ok) {
+      console.warn('Groq Whisper error:', res.status, (await res.text()).slice(0, 150));
+      return null;
+    }
+    const data = await res.json();
+    return data?.text?.trim() || null;
+  } catch (err) {
+    console.warn('Groq Whisper exception:', err);
+    return null;
+  }
+}
+
+/** Fast, ChatGPT-quality AI fallback via Groq (Llama 3.3 70B / Llama 4 Scout Vision) */
+async function callGroqAI(
+  combinedInstructions: string,
+  userMessage: string,
+  history: ChatTurn[],
+  audioData?: { base64: string; mimeType: string },
+  imageData?: { base64: string; mimeType: string }
+): Promise<string | null> {
+  const groqKey = process.env.GROQ_API_KEY || '';
+  if (!groqKey) return null;
+
+  let queryText = userMessage;
+  if (audioData?.base64) {
+    const transcript = await transcribeAudioWithGroq(audioData);
+    if (transcript) {
+      queryText = `[Voice Note Transcript]: "${transcript}"`;
+    } else {
+      return null; // Cannot understand audio without Whisper or Gemini
+    }
+  }
+
+  const messages: Array<{ role: string; content: unknown }> = [
+    { role: 'system', content: combinedInstructions },
+  ];
+
+  for (const h of history.slice(-6)) {
+    const txt = h.parts?.[0]?.text;
+    if (txt) {
+      messages.push({ role: h.role === 'model' ? 'assistant' : 'user', content: txt });
+    }
+  }
+
+  if (imageData?.base64) {
+    const cleanImgMime = imageData.mimeType.split(';')[0].trim() || 'image/jpeg';
+    messages.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: queryText || 'Please read this medication pack or prescription.' },
+        { type: 'image_url', image_url: { url: `data:${cleanImgMime};base64,${imageData.base64}` } },
+      ],
+    });
+  } else {
+    messages.push({ role: 'user', content: queryText });
+  }
+
+  const groqModel = imageData?.base64 ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile';
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${groqKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: groqModel,
+        messages,
+        temperature: 0.35,
+        max_tokens: 800,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!res.ok) {
+      console.warn(`Groq ${groqModel} returned ${res.status}:`, (await res.text()).slice(0, 150));
+      return null;
+    }
+
+    const data = await res.json();
+    const reply = data?.choices?.[0]?.message?.content;
+    return reply ? reply.trim() : null;
+  } catch (err) {
+    console.warn('Groq fetch exception:', err);
+    return null;
+  }
+}
+
 async function callGeminiAI(
   systemPrompt: string,
   userMessage: string,
   audioData?: { base64: string; mimeType: string },
   imageData?: { base64: string; mimeType: string },
   phoneKey?: string,
-  rememberedDialect?: string
+  rememberedDialect?: string,
+  persistedHistory?: ChatTurn[]
 ): Promise<string> {
   const geminiApiKey = process.env.GEMINI_API_KEY || '';
+  const groqApiKey = process.env.GROQ_API_KEY || '';
 
-  if (!geminiApiKey) {
-    console.warn('GEMINI_API_KEY not configured, falling back to intent detection');
-    return detectIntentKeywords(userMessage, rememberedDialect);
-  }
+  // Merge Supabase persisted history with in-memory history
+  const activeHistory =
+    (persistedHistory && persistedHistory.length > 0 ? persistedHistory : undefined) ||
+    (phoneKey && userConversationHistory[phoneKey] ? userConversationHistory[phoneKey] : []);
 
-  // 1. Clean audio & image MIME types (e.g. remove '; codecs=opus' which Google rejects with 400)
-  let cleanAudioMime = audioData?.mimeType ? audioData.mimeType.split(';')[0].trim() : 'audio/ogg';
-  if (cleanAudioMime === 'audio/opus') cleanAudioMime = 'audio/ogg';
-  const cleanImageMime = imageData?.mimeType ? imageData.mimeType.split(';')[0].trim() : 'image/jpeg';
-
-  // 2. Format conversation context into the prompt (universal compatibility across all Gemini endpoints)
+  // Format conversation context into the prompt (universal compatibility)
   let conversationHistoryContext = '';
-  if (phoneKey && userConversationHistory[phoneKey] && userConversationHistory[phoneKey].length > 0) {
-    const history = userConversationHistory[phoneKey].slice(-6);
+  if (activeHistory.length > 0) {
+    const history = activeHistory.slice(-6);
     conversationHistoryContext = `\n\n📜 RECENT CONVERSATION HISTORY (What was just discussed with this patient):\n` +
       history
         .map((h) => `${h.role === 'user' ? 'Patient' : 'Assistant'}: "${h.parts?.[0]?.text || ''}"`)
         .join('\n') +
       `\n\n🚨 CRITICAL CONTINUATION INSTRUCTION:
 The patient's new message is directly replying to the conversation history above!
-- If the patient replies "Yes", "Okay", "Gida", "Kawo", "Karba", "Pick up", "Delivery", or confirms an offer: understand their reply in context of the last question!
-- If you asked whether they want delivery or pickup, and they say "Yes" or "Deliver", confirm delivery and ask for their address or let them know it's being packed.
-- If you asked which pharmacy they use, and they name one, route them to that pharmacy.
+- Understand their reply in full context of what was just said.
+- If they say "No I am just asking for now", DO NOT place an order! Just acknowledge warmly and answer any follow-up question.
 - ALWAYS respond in the exact language or dialect the patient is using (Hausa, Yoruba, Igbo, Pidgin, or English)!
 - NEVER cut off your sentence in the middle. Complete your full message before outputting the metadata tags.`;
   }
 
   const combinedInstructions = `${systemPrompt}${conversationHistoryContext}`;
 
-  const currentParts: Array<Record<string, unknown>> = [];
-  if (audioData?.base64) {
+  // 1. Try Gemini if configured
+  if (geminiApiKey) {
+    let cleanAudioMime = audioData?.mimeType ? audioData.mimeType.split(';')[0].trim() : 'audio/ogg';
+    if (cleanAudioMime === 'audio/opus') cleanAudioMime = 'audio/ogg';
+    const cleanImageMime = imageData?.mimeType ? imageData.mimeType.split(';')[0].trim() : 'image/jpeg';
+
+    const currentParts: Array<Record<string, unknown>> = [];
+    if (audioData?.base64) {
+      currentParts.push({
+        inlineData: {
+          mimeType: cleanAudioMime,
+          data: audioData.base64,
+        },
+      });
+      currentParts.push({
+        text: 'Listen carefully to this audio voice note message. The patient is speaking in their native language or local Nigerian dialect (Hausa, Yoruba, Igbo, Nigerian Pidgin, English, or Arabic). Understand their health or refill need and respond in that exact dialect.',
+      });
+    }
+    if (imageData?.base64) {
+      currentParts.push({
+        inlineData: {
+          mimeType: cleanImageMime,
+          data: imageData.base64,
+        },
+      });
+      currentParts.push({
+        text: "The patient has sent a photo of their medication, blister strip, medicine container, or doctor's prescription paper. Carefully read the text on the pack: identify the exact medication name (brand or generic), dosage/strength (e.g. 10mg, 500mg, 1g), and quantity if visible. Confirm what you see and help them arrange their refill.",
+      });
+    }
+
+    const userQueryText = userMessage.trim() && userMessage !== '[Voice Note Message]' && userMessage !== '[Photo of medication blister pack or doctor prescription]'
+      ? userMessage
+      : 'Please assist me with my health or medication refill request.';
+
     currentParts.push({
-      inlineData: {
-        mimeType: cleanAudioMime,
-        data: audioData.base64,
-      },
+      text: `System & Medical Instructions:\n${combinedInstructions}\n\nPatient's Current Message:\n"${userQueryText}"`,
     });
-    currentParts.push({
-      text: 'Listen carefully to this audio voice note message. The patient is speaking in their native language or local Nigerian dialect (Hausa, Yoruba, Igbo, Nigerian Pidgin, English, or Arabic). Understand their health or refill need and respond in that exact dialect.',
-    });
-  }
-  if (imageData?.base64) {
-    currentParts.push({
-      inlineData: {
-        mimeType: cleanImageMime,
-        data: imageData.base64,
-      },
-    });
-    currentParts.push({
-      text: "The patient has sent a photo of their medication, blister strip, medicine container, or doctor's prescription paper. Carefully read the text on the pack: identify the exact medication name (brand or generic), dosage/strength (e.g. 10mg, 500mg, 1g), and quantity if visible. Confirm what you see and help them arrange their refill.",
-    });
-  }
 
-  const userQueryText = userMessage.trim() && userMessage !== '[Voice Note Message]' && userMessage !== '[Photo of medication blister pack or doctor prescription]'
-    ? userMessage
-    : 'Please assist me with my health or medication refill request.';
+    const body = {
+      contents: [{ role: 'user', parts: currentParts }],
+      generationConfig: { temperature: 0.35, maxOutputTokens: 1500 },
+    };
 
-  currentParts.push({
-    text: `System & Medical Instructions:\n${combinedInstructions}\n\nPatient's Current Message:\n"${userQueryText}"`,
-  });
+    const MODELS_TO_TRY = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+    let hitRateLimit = false;
 
-  const body = {
-    contents: [
-      {
-        role: 'user',
-        parts: currentParts,
-      },
-    ],
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: 2048,
-    },
-  };
+    for (const model of MODELS_TO_TRY) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(8000),
+          }
+        );
 
-  // 3. Robust multi-model fallback chain (Active Verified Google Gemini Models)
-  const MODELS_TO_TRY = [
-    'gemini-2.5-flash',
-    'gemini-flash-latest',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-pro',
-  ];
-
-  for (const model of MODELS_TO_TRY) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+        if (!res.ok) {
+          const errText = await res.text();
+          console.warn(`Gemini model ${model} returned status ${res.status}:`, errText.slice(0, 180));
+          if (res.status === 429) hitRateLimit = true;
+          continue;
         }
-      );
 
-      if (!res.ok) {
-        const errText = await res.text();
-        console.warn(`Gemini model ${model} returned status ${res.status}:`, errText.slice(0, 180));
-        continue; // Try next model in chain
+        const data = await res.json();
+        const replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (replyText && replyText.trim()) {
+          return replyText.trim();
+        }
+      } catch (err) {
+        console.warn(`Gemini model ${model} fetch exception:`, err);
       }
+    }
 
-      const data = await res.json();
-      const replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (replyText && replyText.trim()) {
-        return replyText.trim();
-      }
-    } catch (err) {
-      console.warn(`Gemini model ${model} fetch exception:`, err);
+    if (hitRateLimit) {
+      console.warn('Gemini hit 429 rate limit — failing over to Groq');
     }
   }
 
-  console.error('All Gemini models exhausted or failed, falling back to contextual keywords');
-  return detectIntentKeywords(userMessage, rememberedDialect);
+  // 2. Automatic Failover to Groq (Llama 3.3 70B + Whisper) — fast & reliable
+  if (groqApiKey) {
+    const groqReply = await callGroqAI(combinedInstructions, userMessage, activeHistory, audioData, imageData);
+    if (groqReply) return groqReply;
+  }
+
+  console.error('All AI providers (Gemini + Groq) unavailable, falling back to safe keyword responder');
+  return detectIntentKeywords(userMessage, rememberedDialect, Boolean(audioData));
 }
 
-function detectIntentKeywords(msg: string, preferredDialect?: string): string {
+function detectIntentKeywords(msg: string, preferredDialect?: string, isVoice?: boolean): string {
   const lower = msg.toLowerCase().trim();
   const isHausa = preferredDialect === 'Hausa' || lower.includes('hawan jini') || lower.includes('ciwon suga') || lower.includes('magani') || lower.includes('sannu') || lower.includes('kare') || lower.includes('gida') || lower.includes('kawo') || lower.includes('karba') || lower.includes('eh') || lower.includes('toh') || lower.includes('nagode');
   const isYoruba = preferredDialect === 'Yoruba' || lower.includes('eje riru') || lower.includes('atogbe') || lower.includes('oogun') || lower.includes('beeni') || lower.includes('ile') || lower.includes('e se');
   const isIgbo = preferredDialect === 'Igbo' || lower.includes('mgbali elu') || lower.includes('shuga') || lower.includes('ogwu') || lower.includes('ulo') || lower.includes('dalu');
+
+  if (isVoice || msg === '[Voice Note Message]') {
+    return `🎙️ I received your voice note! Our audio AI is temporarily busy right now — please type your message briefly in Hausa, Yoruba, Igbo, Pidgin, or English and I will assist you immediately.\nLANG: ${isHausa ? 'ha' : isYoruba ? 'yo' : isIgbo ? 'ig' : 'en'}`;
+  }
+
+  // 0. JUST ASKING / NO ORDER YET
+  if (
+    lower.includes('just asking') ||
+    lower.includes('only asking') ||
+    lower.startsWith('no ') ||
+    lower === 'no' ||
+    lower === 'not now' ||
+    lower.includes('later')
+  ) {
+    if (isHausa) {
+      return `Ba komai! 👍 Idan kuna da wata tambaya ko kuma idan kun shirya oda nan gaba, ku sanar da ni kawai.\nLANG: ha`;
+    }
+    return `No problem at all! 👍 Feel free to ask anything else, and let me know whenever you're ready to place an order.\nLANG: en`;
+  }
 
   // 1. AFFIRMATION / CONFIRMATION (Patient answering "Yes", "Okay", "Eh", "To", "Sure")
   const isAffirmation =
@@ -451,15 +590,15 @@ function detectIntentKeywords(msg: string, preferredDialect?: string): string {
 
   if (isInquiry) {
     if (isHausa) {
-      return `Sannu! 💊 E, muna da wannan maganin a shagon maganinmu. Kuna son a kawo muku gida ne ko za ku zo ku karba?\nLANG: ha\nORDER_DETECTED: ${msg.trim()}`;
+      return `Sannu! 💊 E, muna da wannan maganin a shagon maganinmu. Kuna son ku yi oda ne (a kawo muku gida ko za ku zo ku karba)?\nLANG: ha`;
     }
     if (isYoruba) {
-      return `E ku ojumo! 💊 Beeni, a ni oogun yii ni ile-ise oogun wa. Se e fe ki a fi ranse si ile ni tabi e ma wa gba?\nLANG: yo\nORDER_DETECTED: ${msg.trim()}`;
+      return `E ku ojumo! 💊 Beeni, a ni oogun yii ni ile-ise oogun wa. Se e fe ki a pese re fun yin tabi e kan n bere ni?\nLANG: yo`;
     }
     if (isIgbo) {
-      return `Nnoo! 💊 Ee, anyi nwere ogwu a n'ulo ogwu anyi. O bu ka e ziteere gi ya n'ulo ka o bu na i ga-abia n'onwe gi nata ya?\nLANG: ig\nORDER_DETECTED: ${msg.trim()}`;
+      return `Nnoo! 💊 Ee, anyi nwere ogwu a n'ulo ogwu anyi. I choro itinye oda ugbu a ka i na-aju aju?\nLANG: ig`;
     }
-    return `Yes! 💊 We have that medication available in our pharmacy network. Would you like us to prepare a pack for home delivery or pharmacy pickup?\nLANG: en\nORDER_DETECTED: ${msg.trim()}`;
+    return `Yes! 💊 We have that medication available in our pharmacy network. Would you like to place an order for delivery or pickup, or are you just checking?\nLANG: en`;
   }
 
   // 6. GENERAL REFILL / MEDICATIONS (English / Pidgin / Hausa / Yoruba / Igbo)
@@ -1240,14 +1379,42 @@ export async function POST(req: NextRequest) {
       };
     }
 
+    // Extract persisted conversation history from customerRecord.notes ([CHAT_LOG:...])
+    let persistedHistory: ChatTurn[] = [];
+    let cleanCustomerNotes = customerRecord?.notes || 'Valued customer';
+    if (customerRecord?.notes) {
+      const logMatch = customerRecord.notes.match(/\[CHAT_LOG:([\s\S]*?)\]$/);
+      if (logMatch) {
+        cleanCustomerNotes = customerRecord.notes.replace(/\[CHAT_LOG:[\s\S]*?\]$/, '').trim() || 'Valued customer';
+        try {
+          const parsed = JSON.parse(logMatch[1]);
+          if (Array.isArray(parsed)) {
+            persistedHistory = parsed
+              .filter((t: { r?: string; t?: string }) => t && t.t)
+              .map((t: { r?: string; t?: string }) => ({
+                role: t.r === 'm' ? 'model' : 'user',
+                parts: [{ text: String(t.t) }],
+              }));
+          }
+        } catch {
+          // ignore malformed chat log
+        }
+      }
+    }
+
+    const attachedPharmacyInfo = activeBizName
+      ? `${activeBizName} (${resolvedBiz?.location || 'Nigeria'}, slug: ${activeSlug})`
+      : 'Not yet linked to a specific pharmacy (if they ask which pharmacy they are attached to, tell them honestly they are not linked to a specific pharmacy yet and ask which partner pharmacy they use: Danfodio Pharmacy, Apex Health, or Amphy Pharmacy)';
+
     const patientMemoryPrompt = `
 🧠 PATIENT PERSISTENT MEMORY (PERSONAL AI):
 - Patient Real Name: ${customerRecord?.full_name || displayName}
+- Attached / Registered Pharmacy: ${attachedPharmacyInfo}
 - Known Previous Medications: ${medicationHistory || 'Routine Chronic / Community Pharmacy Patient'}
 - Remembered Language: ${rememberedLang || 'Detect from conversation'}
 - Remembered Preferred Modality: ${prefersVoiceStored ? 'VOICE NOTES (Prefers spoken audio over text)' : 'Text / Audio'}
-- Clinical / Customer Notes: ${customerRecord?.notes || 'Valued customer'}
-- INSTRUCTION: Treat the patient with warm familiarity like their trusted personal pharmacist who knows them and respects their dialect.`;
+- Clinical / Customer Notes: ${cleanCustomerNotes}
+- INSTRUCTION: Treat the patient with warm familiarity like their trusted personal pharmacist who knows them, knows which pharmacy they belong to, and respects their dialect.`;
 
     let systemPrompt = '';
     if (activeBizName) {
@@ -1263,33 +1430,26 @@ You possess native-level fluency in:
 4. NIGERIAN PIDGIN — e.g. "How far", "My BP drug don finish", "Abeg send am come my house", "No wahala at all".
 5. NIGERIAN ENGLISH & ARABIC.
 
-🚨 CRITICAL LANGUAGE MATCHING RULE:
-- ALWAYS detect the patient's language or dialect from their text or voice note.
-- YOU MUST REPLY IN THE EXACT SAME LANGUAGE OR DIALECT they communicated in!
-- If they speak Hausa, reply in warm, respectful, fluent Hausa.
-- If they speak Yoruba, reply in warm, respectful Yoruba.
-- If they speak Igbo, reply in warm, respectful Igbo.
-- If they speak Pidgin, reply in friendly Nigerian Pidgin.
-- If they speak English, reply in friendly Nigerian English.
+🚨 CRITICAL CONVERSATIONAL & LANGUAGE RULES:
+- ALWAYS detect the patient's language or dialect from their text or voice note, and REPLY IN THAT EXACT SAME LANGUAGE/DIALECT!
+- Chat naturally like a real, intelligent human pharmacist (like ChatGPT/Gemini). NEVER sound robotic or repeat canned menus.
+- If they ask which pharmacy they are attached to, tell them clearly: "${activeBizName}".
+- STRICT ORDER RULE: Asking a question ("Do you have Metformin?", "How much is Amlodipine?", "I am just asking for now") is NOT an order! You MUST output "ORDER_DETECTED: NONE" for questions or casual chat.
+- ONLY output "ORDER_DETECTED: <Medication Name>" when the patient EXPLICITLY confirms they want to place an order, refill, pickup, or delivery (e.g. "Yes, send it", "Prepare it for pickup", "Deliver to my address", "I want to order Metformin").
+- When an order IS confirmed, tell the patient clearly: "I've forwarded your request to ${activeBizName}'s pharmacist for approval and preparation."
 
 CLINICAL & REFILL INTELLIGENCE:
-1. Identify all medications (brands, generics, or local names):
-   - Chronic: Amlodipine, Metformin, Lisinopril, Losartan, Atorvastatin, Omeprazole, etc. ("hawan jini", "ciwon suga", "eje riru", "mgbali elu").
-   - Acute: Malaria (Coartem, Lonart, Amatem), Antibiotics (Augmentin, Amoxil), Pain/Fever (Paracetamol).
-2. If they need a refill or their medication finished:
-   - Acknowledge warmly on behalf of ${activeBizName}.
-   - Ask if they want home delivery (kawo gida / fi ranse si ile) or pharmacy pickup.
-3. If they give a delivery address: confirm the address warmly and let them know our dispensary team is packing it.
-4. Voice Note Friendly: Keep replies natural, human, conversational, and under 60 words so it sounds smooth when played as a voice note. Never use numbered menus or robotic phrases.
+1. Identify all medications (brands, generics, or local names): Amlodipine, Metformin, Lisinopril, Losartan, Atorvastatin, Omeprazole, Coartem, Lonart, Augmentin, Paracetamol, etc.
+2. If they ask about availability, answer naturally and ask if they'd like to order or are just checking.
+3. If they confirm an order, ask if they prefer home delivery or counter pickup (if not stated).
+4. Voice Note Friendly: Keep replies natural, warm, concise (under 65 words), and complete.
 
 📸 PHOTO & PRESCRIPTION SCANNER:
 When the patient sends a photo of their drug box, blister strip, or doctor prescription:
-- Inspect the photo carefully: identify the exact medication name and dosage (e.g. "Amlodipine 10mg", "Metformin 500mg", "Lonart DS").
-- Warmly confirm the medication you recognized from the photo in their language (e.g. "I see your Amlodipine 10mg in the photo! 💊").
-- Ask if they want a fresh pack prepared for home delivery or pickup.
+- Identify the exact medication name and dosage, confirm warmly in their language, and ask if they want to order it.
 
 METADATA TAGS AT THE VERY END (each on its own line):
-ORDER_DETECTED: [detected medication or item, or NONE]
+ORDER_DETECTED: [exact medication + delivery/pickup ONLY if user explicitly confirmed an order, otherwise NONE]
 LANG: [ha | yo | ig | ar | en]`;
     } else {
       systemPrompt = `You are an exceptionally smart, polyglot AI concierge for RetainNG (the customer retention & refill concierge network in Nigeria).
@@ -1297,18 +1457,15 @@ You represent partner businesses including Danfodio Pharmacy (Kaduna), Apex Heal
 The client messaging you is named: ${displayName} (Phone ending in: ...${cleanPhone.slice(-4)})
 ${patientMemoryPrompt}
 
-🔥 SUPERPOWER: MULTILINGUAL & LOCAL DIALECT EXPERTISE
-You fluently understand and speak Hausa, Yoruba, Igbo, Nigerian Pidgin, English, and Arabic.
-ALWAYS REPLY IN THE EXACT SAME LANGUAGE OR DIALECT the patient used!
-
-Guidelines:
-1. Greet them warmly in their language/dialect.
-2. If they ask for a refill or service without stating which pharmacy they visit: ask them which partner store they are registered with so you can route their order immediately.
-3. If they send a photo of their medication box or prescription: read the medication name and dosage, confirm what you see, and help them arrange the order.
-4. Keep replies friendly, concise (under 60 words), and voice-note ready.
+🚨 CRITICAL CONVERSATIONAL & LANGUAGE RULES:
+- Fluently understand and speak Hausa, Yoruba, Igbo, Nigerian Pidgin, English, and Arabic. ALWAYS REPLY IN THE EXACT SAME LANGUAGE OR DIALECT the patient used!
+- Chat naturally like a real human concierge (never robotic).
+- If they ask which pharmacy they are attached to, tell them honestly they are currently in general concierge mode (not linked to a specific pharmacy yet) and ask which partner pharmacy they use.
+- STRICT ORDER RULE: Asking a question ("Do you have Metformin?", "I am just asking for now") is NOT an order! Output "ORDER_DETECTED: NONE" unless they explicitly confirm they want to place an order or delivery/pickup.
+- Keep replies friendly, concise (under 65 words), and complete.
 
 METADATA TAGS AT THE VERY END (each on its own line):
-ORDER_DETECTED: [detected medication or item, or NONE]
+ORDER_DETECTED: [exact medication + delivery/pickup ONLY if user explicitly confirmed an order, otherwise NONE]
 LANG: [ha | yo | ig | ar | en]`;
     }
 
@@ -1324,7 +1481,8 @@ LANG: [ha | yo | ig | ar | en]`;
         audioData,
         imageData,
         cleanPhone,
-        rememberedLang
+        rememberedLang,
+        persistedHistory
       );
 
       if (rawAiReply.includes('LANG:')) {
@@ -1366,7 +1524,7 @@ LANG: [ha | yo | ig | ar | en]`;
     } catch (err) {
       console.error('Gemini fatal exception, falling back to keywords:', err);
       // Fallback if AI service is temporarily unavailable
-      const kwResult = detectIntentKeywords(messageBody, rememberedLang);
+      const kwResult = detectIntentKeywords(messageBody, rememberedLang, isVoiceInput);
       if (kwResult.includes('LANG: ha')) detectedLang = 'ha';
       else if (kwResult.includes('LANG: yo')) detectedLang = 'yo';
       else if (kwResult.includes('LANG: ig')) detectedLang = 'ig';
@@ -1400,7 +1558,7 @@ LANG: [ha | yo | ig | ar | en]`;
     if (shouldSendVoice) {
       const voiceText = aiReply
         .replace(/\*+/g, '')
-        .replace(/[💊🩺❤️🌟📍👉]/gu, '')
+        .replace(/[💊🩺❤️🌟📍👉🎙️]/gu, '')
         .trim()
         .slice(0, 200);
 
@@ -1408,8 +1566,8 @@ LANG: [ha | yo | ig | ar | en]`;
       await sendWhatsAppVoice(cleanPhone, voiceUrl);
     }
 
-    // 3. Persist and update patient memory in Supabase
-    if (supabaseAdmin && (detectedLang || isVoiceInput)) {
+    // 3. Persist and update patient memory + conversation history in Supabase (survives Vercel cold starts)
+    if (supabaseAdmin) {
       const client = supabaseAdmin;
       const langTag =
         detectedLang === 'ha'
@@ -1423,7 +1581,7 @@ LANG: [ha | yo | ig | ar | en]`;
           : 'Lang:English';
 
       try {
-        let custId = customerRecord?.id;
+        let custId = customerRecord?.id && customerRecord.id !== 'owner-test' ? customerRecord.id : undefined;
         let currentTags = customerRecord?.tags || [];
 
         if (!custId) {
@@ -1447,12 +1605,25 @@ LANG: [ha | yo | ig | ar | en]`;
             }
           }
 
+          const updatedHistory = [
+            ...persistedHistory,
+            { role: 'user' as const, parts: [{ text: messageBody.slice(0, 200) }] },
+            { role: 'model' as const, parts: [{ text: aiReply.slice(0, 250) }] },
+          ].slice(-6);
+
+          const compactLog = JSON.stringify(
+            updatedHistory.map((h) => ({
+              r: h.role === 'model' ? 'm' : 'u',
+              t: h.parts?.[0]?.text || '',
+            }))
+          );
+
           const modalityStr = isVoiceInput ? 'Voice Note' : 'WhatsApp Text';
           const memoryNote = `Prefers ${langTag.replace('Lang:', '')} ${
             updatedTags.includes('Prefers-Voice') ? 'Voice Notes' : 'text'
           }. Last contact: ${modalityStr} on ${new Date().toLocaleDateString('en-GB')}. ${
             detectedMed ? `Order: ${detectedMed}` : ''
-          }`.trim();
+          }\n[CHAT_LOG:${compactLog}]`.trim();
 
           await client
             .from('customers')
@@ -1485,11 +1656,11 @@ LANG: [ha | yo | ig | ar | en]`;
 
     if (isRealOrder) {
       // --- ANTI-CHEAT CHECK: Verify if business subscription is overdue ---
-      if (supabaseAdmin && activeSlug) {
+      if (supabaseAdmin && activeSlug && activeSlug !== 'general') {
         try {
           const { data: bCheck } = await supabaseAdmin
             .from('businesses')
-            .select('name, subscription_status, manager_phone')
+            .select('name, subscription_status, manager_alert_phone, phone')
             .eq('opt_in_slug', activeSlug)
             .maybeSingle();
 
@@ -1499,7 +1670,7 @@ LANG: [ha | yo | ig | ar | en]`;
               `Please visit or call the pharmacy dispensary counter directly to pick up your medication. Thank you! 💊`;
             await sendWhatsApp(cleanPhone, maintMsg);
 
-            const mgrPhone = bCheck.manager_phone || await getManagerPhone(activeSlug, host);
+            const mgrPhone = (bCheck.manager_alert_phone || bCheck.phone || '').replace(/[^0-9]/g, '') || await getManagerPhone(activeSlug, host);
             const protocol = host.includes('localhost') ? 'http' : 'https';
             const billingUrl = `${protocol}://${host}/billing/${activeSlug}`;
 
@@ -1531,15 +1702,16 @@ LANG: [ha | yo | ig | ar | en]`;
       }).catch(() => {});
 
       const managerPhone = await getManagerPhone(activeSlug, host);
-      if (managerPhone && managerPhone !== cleanPhone) {
+      if (managerPhone) {
         const targetStore = activeBizName || 'RetainNG Partner Store';
+        const isSelfTest = managerPhone === cleanPhone;
         const managerAlert =
-          `🚨 *NEW REFILL ORDER — ${targetStore}*\n\n` +
+          `${isSelfTest ? '🏪 *[PHARMACY MANAGER APPROVAL ALERT]*\n' : ''}🚨 *NEW REFILL ORDER — ${targetStore}*\n\n` +
           `👤 *Patient:* ${displayName}\n` +
           `📱 *Phone:* +${cleanPhone}\n` +
           `💊 *Medication:* ${detectedMed || messageBody}\n\n` +
           `━━━━━━━━━━━━━━━━━━━━━\n` +
-          `⚡ *1-TAP REPLIES:*\n` +
+          `⚡ *1-TAP APPROVAL REPLIES:*\n` +
           `• *For Counter Pickup:* Reply 👉 *READY ${cleanPhone.slice(-4)}*\n` +
           `• *For Home Delivery:* Reply 👉 *DISPATCH ${cleanPhone.slice(-4)}*\n` +
           `📞 Or tap phone number above to call patient directly.`;
@@ -1603,10 +1775,40 @@ export async function GET() {
     }
   }
 
+  const groqApiKey = process.env.GROQ_API_KEY || '';
+  const groqTestResult: Record<string, unknown> = {
+    has_key: Boolean(groqApiKey),
+    key_prefix: groqApiKey ? groqApiKey.slice(0, 8) + '...' : 'none',
+  };
+
+  if (groqApiKey) {
+    try {
+      const gRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: 'Say "Sannu, ina nan lafiya." in Hausa.' }],
+          max_tokens: 50,
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      const gData = await gRes.json();
+      groqTestResult.status = gRes.status;
+      groqTestResult.reply = gData?.choices?.[0]?.message?.content || gData;
+    } catch (err: unknown) {
+      groqTestResult.error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   return NextResponse.json({
     status: 'healthy',
-    engine: 'RetainNG WhatsApp AI Concierge v2 (Gemini-powered)',
+    engine: 'RetainNG WhatsApp AI Concierge v3 (Gemini 2.5 + Groq Llama 3.3 / Whisper Failover)',
     gemini_diagnostics: geminiTestResult,
+    groq_diagnostics: groqTestResult,
     supported_gateways: ['Green-API', 'Twilio WhatsApp API', 'Meta Cloud API'],
   });
 }

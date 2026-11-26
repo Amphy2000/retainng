@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   }
 
   const config = pharmacyConfig[slug];
-  if (config) {
+  if (config && config.managerPhone) {
     return NextResponse.json({ found: true, slug, ...config });
   }
 
