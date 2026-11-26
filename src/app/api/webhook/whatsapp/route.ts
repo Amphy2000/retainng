@@ -279,48 +279,49 @@ async function callGroqAI(
   }
 
   if (imageData?.base64) {
-    const cleanImgMime = imageData.mimeType.split(';')[0].trim() || 'image/jpeg';
     messages.push({
       role: 'user',
-      content: [
-        { type: 'text', text: queryText || 'Please read this medication pack or prescription.' },
-        { type: 'image_url', image_url: { url: `data:${cleanImgMime};base64,${imageData.base64}` } },
-      ],
+      content: `${queryText} (Note: Patient attached a medication photo, but image vision is temporarily unavailable — politely ask them in their language to type the drug name written on the pack so you can assist immediately.)`,
     });
   } else {
     messages.push({ role: 'user', content: queryText });
   }
 
-  const groqModel = imageData?.base64 ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile';
+  // Note: Groq key's active text models (verified via /v1/models)
+  const GROQ_MODELS_TO_TRY = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
 
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${groqKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: groqModel,
-        messages,
-        temperature: 0.35,
-        max_tokens: 800,
-      }),
-      signal: AbortSignal.timeout(8000),
-    });
+  for (const groqModel of GROQ_MODELS_TO_TRY) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages,
+          temperature: 0.35,
+          max_tokens: 1500,
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
 
-    if (!res.ok) {
-      console.warn(`Groq ${groqModel} returned ${res.status}:`, (await res.text()).slice(0, 150));
-      return null;
+      if (!res.ok) {
+        console.warn(`Groq ${groqModel} returned ${res.status}:`, (await res.text()).slice(0, 150));
+        continue;
+      }
+
+      const data = await res.json();
+      const reply = data?.choices?.[0]?.message?.content;
+      if (reply && reply.trim()) {
+        return reply.trim();
+      }
+    } catch (err) {
+      console.warn(`Groq ${groqModel} fetch exception:`, err);
     }
-
-    const data = await res.json();
-    const reply = data?.choices?.[0]?.message?.content;
-    return reply ? reply.trim() : null;
-  } catch (err) {
-    console.warn('Groq fetch exception:', err);
-    return null;
   }
+  return null;
 }
 
 async function callGeminiAI(
@@ -1790,9 +1791,9 @@ export async function GET() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: 'openai/gpt-oss-120b',
           messages: [{ role: 'user', content: 'Say "Sannu, ina nan lafiya." in Hausa.' }],
-          max_tokens: 50,
+          max_tokens: 600,
         }),
         signal: AbortSignal.timeout(5000),
       });
