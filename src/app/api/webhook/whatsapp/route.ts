@@ -324,6 +324,88 @@ async function callGroqAI(
   return null;
 }
 
+/** OpenRouter Free Vision & Chat Failover (handles drug/prescription photos when Gemini hits free-tier cap) */
+async function callOpenRouterAI(
+  combinedInstructions: string,
+  userMessage: string,
+  history: ChatTurn[],
+  imageData?: { base64: string; mimeType: string }
+): Promise<string | null> {
+  const openRouterKey = process.env.OPENROUTER_API_KEY || '';
+  if (!openRouterKey) return null;
+
+  const messages: Array<{ role: string; content: unknown }> = [
+    { role: 'system', content: combinedInstructions },
+  ];
+
+  for (const h of history.slice(-6)) {
+    const txt = h.parts?.[0]?.text;
+    if (txt) {
+      messages.push({ role: h.role === 'model' ? 'assistant' : 'user', content: txt });
+    }
+  }
+
+  if (imageData?.base64) {
+    const cleanImgMime = imageData.mimeType.split(';')[0].trim() || 'image/jpeg';
+    const promptText =
+      userMessage && userMessage !== '[Photo of medication blister pack or doctor prescription]'
+        ? userMessage
+        : "Read the medication name, dosage/strength, and quantity from this drug pack or prescription photo, and help the patient.";
+    messages.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: promptText },
+        { type: 'image_url', image_url: { url: `data:${cleanImgMime};base64,${imageData.base64}` } },
+      ],
+    });
+  } else {
+    messages.push({ role: 'user', content: userMessage });
+  }
+
+  const OPENROUTER_MODELS = imageData?.base64
+    ? [
+        'qwen/qwen2.5-vl-72b-instruct:free',
+        'google/gemma-3-27b-it:free',
+        'meta-llama/llama-3.2-11b-vision-instruct:free',
+      ]
+    : ['openrouter/free', 'google/gemma-3-27b-it:free'];
+
+  for (const model of OPENROUTER_MODELS) {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${openRouterKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://retainng.vercel.app',
+          'X-Title': 'RetainNG WhatsApp Concierge',
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.35,
+          max_tokens: 900,
+        }),
+        signal: AbortSignal.timeout(9000),
+      });
+
+      if (!res.ok) {
+        console.warn(`OpenRouter ${model} returned ${res.status}:`, (await res.text()).slice(0, 150));
+        continue;
+      }
+
+      const data = await res.json();
+      const reply = data?.choices?.[0]?.message?.content;
+      if (reply && reply.trim()) {
+        return reply.trim();
+      }
+    } catch (err) {
+      console.warn(`OpenRouter ${model} exception:`, err);
+    }
+  }
+  return null;
+}
+
 async function callGeminiAI(
   systemPrompt: string,
   userMessage: string,
@@ -439,13 +521,25 @@ The patient's new message is directly replying to the conversation history above
     }
   }
 
-  // 2. Automatic Failover to Groq (Llama 3.3 70B + Whisper) — fast & reliable
+  // 2. If a photo was sent and Gemini failed/rate-limited, try OpenRouter Free Vision first!
+  if (imageData?.base64 && process.env.OPENROUTER_API_KEY) {
+    const visionReply = await callOpenRouterAI(combinedInstructions, userMessage, activeHistory, imageData);
+    if (visionReply) return visionReply;
+  }
+
+  // 3. Automatic Failover to Groq (openai/gpt-oss-120b + Whisper) — fast & reliable
   if (groqApiKey) {
     const groqReply = await callGroqAI(combinedInstructions, userMessage, activeHistory, audioData, imageData);
     if (groqReply) return groqReply;
   }
 
-  console.error('All AI providers (Gemini + Groq) unavailable, falling back to safe keyword responder');
+  // 4. Final AI Failover to OpenRouter Free Text (if both Gemini & Groq failed)
+  if (!imageData?.base64 && !audioData?.base64 && process.env.OPENROUTER_API_KEY) {
+    const orReply = await callOpenRouterAI(combinedInstructions, userMessage, activeHistory);
+    if (orReply) return orReply;
+  }
+
+  console.error('All AI providers (Gemini + Groq + OpenRouter) unavailable, falling back to safe keyword responder');
   return detectIntentKeywords(userMessage, rememberedDialect, Boolean(audioData));
 }
 
@@ -1805,11 +1899,43 @@ export async function GET() {
     }
   }
 
+  const openRouterKey = process.env.OPENROUTER_API_KEY || '';
+  const openRouterTestResult: Record<string, unknown> = {
+    has_key: Boolean(openRouterKey),
+    key_prefix: openRouterKey ? openRouterKey.slice(0, 8) + '...' : 'none',
+  };
+
+  if (openRouterKey) {
+    try {
+      const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${openRouterKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://retainng.vercel.app',
+          'X-Title': 'RetainNG WhatsApp Concierge',
+        },
+        body: JSON.stringify({
+          model: 'openrouter/free',
+          messages: [{ role: 'user', content: 'Say "Sannu!" in Hausa.' }],
+          max_tokens: 100,
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      const orData = await orRes.json();
+      openRouterTestResult.status = orRes.status;
+      openRouterTestResult.reply = orData?.choices?.[0]?.message?.content || orData;
+    } catch (err: unknown) {
+      openRouterTestResult.error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   return NextResponse.json({
     status: 'healthy',
-    engine: 'RetainNG WhatsApp AI Concierge v3 (Gemini 2.5 + Groq Llama 3.3 / Whisper Failover)',
+    engine: 'RetainNG WhatsApp AI Concierge v4 (Gemini 2.5 + Groq OSS-120B/Whisper + OpenRouter Free Vision)',
     gemini_diagnostics: geminiTestResult,
     groq_diagnostics: groqTestResult,
+    openrouter_diagnostics: openRouterTestResult,
     supported_gateways: ['Green-API', 'Twilio WhatsApp API', 'Meta Cloud API'],
   });
 }
