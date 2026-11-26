@@ -216,7 +216,7 @@ const userConversationHistory: Record<string, ChatTurn[]> = {};
 
 /** Transcribe WhatsApp voice note using Groq Whisper (supports Hausa, Yoruba, Igbo, Pidgin, English) */
 async function transcribeAudioWithGroq(audioData: { base64: string; mimeType: string }): Promise<string | null> {
-  const groqKey = process.env.GROQ_API_KEY || '';
+  const groqKey = process.env.GROQ_API_KEY || process.env.GROK_API_KEY || '';
   if (!groqKey) return null;
 
   try {
@@ -254,7 +254,7 @@ async function callGroqAI(
   audioData?: { base64: string; mimeType: string },
   imageData?: { base64: string; mimeType: string }
 ): Promise<string | null> {
-  const groqKey = process.env.GROQ_API_KEY || '';
+  const groqKey = process.env.GROQ_API_KEY || process.env.GROK_API_KEY || '';
   if (!groqKey) return null;
 
   let queryText = userMessage;
@@ -333,7 +333,7 @@ async function callGeminiAI(
   persistedHistory?: ChatTurn[]
 ): Promise<string> {
   const geminiApiKey = process.env.GEMINI_API_KEY || '';
-  const groqApiKey = process.env.GROQ_API_KEY || '';
+  const groqApiKey = process.env.GROQ_API_KEY || process.env.GROK_API_KEY || '';
 
   // Merge Supabase persisted history with in-memory history
   const activeHistory =
@@ -1775,7 +1775,7 @@ export async function GET() {
     }
   }
 
-  const groqApiKey = process.env.GROQ_API_KEY || '';
+  const groqApiKey = process.env.GROQ_API_KEY || process.env.GROK_API_KEY || '';
   const groqTestResult: Record<string, unknown> = {
     has_key: Boolean(groqApiKey),
     key_prefix: groqApiKey ? groqApiKey.slice(0, 8) + '...' : 'none',
