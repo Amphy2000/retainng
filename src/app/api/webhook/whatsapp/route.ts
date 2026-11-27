@@ -415,18 +415,17 @@ async function callOpenRouterAI(
     messages.push({ role: 'user', content: userMessage });
   }
 
-  // Use specific reliable free models — avoid "openrouter/free" auto-routing which can pick reasoning models
-  // that return content:null (they put their answer in reasoning_details, not content)
+  // Verified live OpenRouter :free models (Gemma 4 & Nemotron VL support both vision & text)
   const OPENROUTER_MODELS = imageData?.base64
     ? [
-        'qwen/qwen2.5-vl-72b-instruct:free',          // Best free vision model (72B, reads drug packs)
-        'meta-llama/llama-3.2-11b-vision-instruct:free', // Llama vision fallback
-        'google/gemma-3-27b-it:free',                 // Gemma text fallback (no vision)
+        'google/gemma-4-31b-it:free',
+        'nvidia/nemotron-3.5-super-vl:free',
+        'google/gemma-4-26b-a4b-it:free',
       ]
     : [
-        'google/gemma-3-27b-it:free',                 // Best free text — NOT a reasoning model
-        'meta-llama/llama-3.1-8b-instruct:free',      // Fast lightweight fallback
-        'mistralai/mistral-7b-instruct:free',         // Final text fallback
+        'google/gemma-4-26b-a4b-it:free',
+        'google/gemma-4-31b-it:free',
+        'nvidia/nemotron-3.5-lightning:free',
       ];
 
   for (const model of OPENROUTER_MODELS) {
@@ -2099,9 +2098,9 @@ export async function GET() {
           'X-Title': 'RetainNG WhatsApp Concierge',
         },
         body: JSON.stringify({
-          model: 'google/gemma-3-27b-it:free',
+          model: 'google/gemma-4-26b-a4b-it:free',
           messages: [{ role: 'user', content: 'Say "Sannu!" in Hausa.' }],
-          max_tokens: 100,
+          max_tokens: 400,
         }),
         signal: AbortSignal.timeout(5000),
       });
