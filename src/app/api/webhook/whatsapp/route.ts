@@ -362,13 +362,19 @@ async function callOpenRouterAI(
     messages.push({ role: 'user', content: userMessage });
   }
 
+  // Use specific reliable free models — avoid "openrouter/free" auto-routing which can pick reasoning models
+  // that return content:null (they put their answer in reasoning_details, not content)
   const OPENROUTER_MODELS = imageData?.base64
     ? [
-        'qwen/qwen2.5-vl-72b-instruct:free',
-        'google/gemma-3-27b-it:free',
-        'meta-llama/llama-3.2-11b-vision-instruct:free',
+        'qwen/qwen2.5-vl-72b-instruct:free',          // Best free vision model (72B, reads drug packs)
+        'meta-llama/llama-3.2-11b-vision-instruct:free', // Llama vision fallback
+        'google/gemma-3-27b-it:free',                 // Gemma text fallback (no vision)
       ]
-    : ['openrouter/free', 'google/gemma-3-27b-it:free'];
+    : [
+        'google/gemma-3-27b-it:free',                 // Best free text — NOT a reasoning model
+        'meta-llama/llama-3.1-8b-instruct:free',      // Fast lightweight fallback
+        'mistralai/mistral-7b-instruct:free',         // Final text fallback
+      ];
 
   for (const model of OPENROUTER_MODELS) {
     try {
@@ -395,7 +401,13 @@ async function callOpenRouterAI(
       }
 
       const data = await res.json();
-      const reply = data?.choices?.[0]?.message?.content;
+      const choice = data?.choices?.[0];
+      // Some free reasoning models return content:null and put text in reasoning_details — handle both
+      const reply =
+        choice?.message?.content ||
+        choice?.message?.reasoning ||
+        choice?.message?.reasoning_details?.[0]?.text ||
+        '';
       if (reply && reply.trim()) {
         return reply.trim();
       }
@@ -1916,7 +1928,7 @@ export async function GET() {
           'X-Title': 'RetainNG WhatsApp Concierge',
         },
         body: JSON.stringify({
-          model: 'openrouter/free',
+          model: 'google/gemma-3-27b-it:free',
           messages: [{ role: 'user', content: 'Say "Sannu!" in Hausa.' }],
           max_tokens: 100,
         }),
@@ -1924,7 +1936,12 @@ export async function GET() {
       });
       const orData = await orRes.json();
       openRouterTestResult.status = orRes.status;
-      openRouterTestResult.reply = orData?.choices?.[0]?.message?.content || orData;
+      const orChoice = orData?.choices?.[0];
+      openRouterTestResult.reply =
+        orChoice?.message?.content ||
+        orChoice?.message?.reasoning ||
+        orChoice?.message?.reasoning_details?.[0]?.text ||
+        orData;
     } catch (err: unknown) {
       openRouterTestResult.error = err instanceof Error ? err.message : String(err);
     }
