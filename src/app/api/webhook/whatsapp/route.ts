@@ -170,8 +170,39 @@ async function getManagerPhone(slug: string, _host?: string): Promise<string> {
   return defaultManagerPhones[slug] || process.env.AGENCY_OWNER_PHONES?.split(',')[0]?.replace(/[^0-9]/g, '') || '2349169153129';
 }
 
+// --- Evolution API v2 (Render + Supabase Postgres) credentials ---
+const EVOLUTION_API_URL = (process.env.EVOLUTION_API_URL || '').replace(/\/+$/, '');
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || 'retainng';
+const WHATSAPP_PROVIDER = (process.env.WHATSAPP_PROVIDER || (EVOLUTION_API_URL ? 'evolution' : 'greenapi')).toLowerCase();
+
 async function sendWhatsApp(toPhone: string, message: string): Promise<void> {
-  const chatId = `${toPhone}@c.us`;
+  const cleanPhone = toPhone.replace(/[^0-9]/g, '');
+
+  // Route via Evolution API (Render + Supabase Postgres) when active
+  if (WHATSAPP_PROVIDER === 'evolution' && EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+    try {
+      const res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: EVOLUTION_API_KEY,
+        },
+        body: JSON.stringify({ number: cleanPhone, text: message }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) {
+        console.warn('Evolution sendText non-200:', res.status, (await res.text()).slice(0, 150));
+      }
+      return;
+    } catch (err) {
+      console.error('Evolution WhatsApp send error:', err);
+      return;
+    }
+  }
+
+  // Fallback: Green-API
+  const chatId = `${cleanPhone}@c.us`;
   try {
     await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendMessage/${GREEN_API_TOKEN}`, {
       method: 'POST',
@@ -183,9 +214,31 @@ async function sendWhatsApp(toPhone: string, message: string): Promise<void> {
   }
 }
 
-/** Sends native voice note / audio message via Green-API */
+/** Sends native voice note / audio message via Evolution API or Green-API */
 async function sendWhatsAppVoice(toPhone: string, audioUrl: string): Promise<void> {
   const cleanPhone = toPhone.replace(/[^0-9]/g, '');
+
+  if (WHATSAPP_PROVIDER === 'evolution' && EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+    try {
+      const res = await fetch(`${EVOLUTION_API_URL}/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: EVOLUTION_API_KEY,
+        },
+        body: JSON.stringify({ number: cleanPhone, audio: audioUrl }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) {
+        console.warn('Evolution voice send warning (non-200):', res.status, (await res.text()).slice(0, 150));
+      }
+      return;
+    } catch (err) {
+      console.warn('Evolution voice send warning:', err);
+      return;
+    }
+  }
+
   const chatId = `${cleanPhone}@c.us`;
   try {
     const res = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`, {
@@ -1166,13 +1219,26 @@ export async function POST(req: NextRequest) {
     } else {
       const json = await req.json();
 
-      // Ignore Green-API outgoing message echoes, status updates, and non-incoming webhooks
+      // 1. Ignore Green-API outgoing message echoes, status updates, and non-incoming webhooks
       if (json?.typeWebhook && json.typeWebhook !== 'incomingMessageReceived') {
         return NextResponse.json({ ignored: `webhook-type:${json.typeWebhook}` });
       }
 
+      // 2. Ignore Evolution API non-message events & outgoing echoes (fromMe)
+      const evoEvent = String(json?.event || '').toLowerCase();
+      if (evoEvent && evoEvent !== 'messages.upsert') {
+        return NextResponse.json({ ignored: `evolution-event:${json.event}` });
+      }
+      if (json?.data?.key?.fromMe === true) {
+        return NextResponse.json({ ignored: 'evolution-from-me' });
+      }
+
+      const evoMsg = json?.data?.message;
+      const evoRemoteJid = json?.data?.key?.remoteJidAlt || json?.data?.key?.remoteJid || '';
+
       fromNumber =
         json?.From ||
+        evoRemoteJid ||
         json?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from ||
         json?.senderData?.chatId ||
         json?.senderData?.sender ||
@@ -1181,7 +1247,7 @@ export async function POST(req: NextRequest) {
         '';
 
       // Ignore WhatsApp Groups (@g.us), Status Broadcasts, and Channels/Newsletters
-      const rawChatId = String(json?.senderData?.chatId || fromNumber || '').toLowerCase();
+      const rawChatId = String(json?.data?.key?.remoteJid || json?.senderData?.chatId || fromNumber || '').toLowerCase();
       if (
         rawChatId.includes('@g.us') ||
         rawChatId.includes('status@broadcast') ||
@@ -1193,6 +1259,9 @@ export async function POST(req: NextRequest) {
 
       messageBody =
         json?.Body ||
+        evoMsg?.conversation ||
+        evoMsg?.extendedTextMessage?.text ||
+        evoMsg?.imageMessage?.caption ||
         json?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body ||
         json?.messageData?.textMessageData?.textMessage ||
         json?.messageData?.extendedTextMessageData?.text ||
@@ -1201,24 +1270,55 @@ export async function POST(req: NextRequest) {
         '';
 
       profileName =
+        json?.data?.pushName ||
         json?.senderData?.senderName ||
         json?.senderData?.chatName ||
         json?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name ||
         json?.messages?.[0]?.from_name ||
         '';
 
-      // Check for incoming audio / voice note
+      // Check for incoming audio / voice note (Green-API or Evolution API)
       const fileData = json?.messageData?.fileMessageData;
       const msgType = json?.messageData?.typeMessage || '';
       if (
+        evoMsg?.audioMessage ||
         msgType === 'audioMessage' ||
         msgType === 'voiceMessage' ||
         fileData?.mimeType?.startsWith('audio')
       ) {
         isVoiceInput = true;
-        if (fileData?.downloadUrl) {
+        const evoBase64 = json?.data?.message?.base64 || json?.data?.base64;
+        if (evoBase64) {
+          audioData = {
+            base64: evoBase64,
+            mimeType: evoMsg?.audioMessage?.mimetype || 'audio/ogg',
+          };
+        } else if (evoMsg?.audioMessage && EVOLUTION_API_URL && EVOLUTION_API_KEY) {
           try {
-            const audioRes = await fetch(fileData.downloadUrl);
+            const mediaRes = await fetch(
+              `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${EVOLUTION_INSTANCE}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+                body: JSON.stringify({ message: json.data, convertToMp4: false }),
+                signal: AbortSignal.timeout(7000),
+              }
+            );
+            if (mediaRes.ok) {
+              const mJson = await mediaRes.json();
+              if (mJson?.base64) {
+                audioData = {
+                  base64: mJson.base64,
+                  mimeType: mJson.mimetype || evoMsg.audioMessage.mimetype || 'audio/ogg',
+                };
+              }
+            }
+          } catch (e) {
+            console.warn('Evolution audio fetch failed:', e);
+          }
+        } else if (fileData?.downloadUrl) {
+          try {
+            const audioRes = await fetch(fileData.downloadUrl, { signal: AbortSignal.timeout(6000) });
             if (audioRes.ok) {
               const buf = await audioRes.arrayBuffer();
               audioData = {
@@ -1232,17 +1332,47 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Check for incoming photo of medication or prescription
+      // Check for incoming photo of medication or prescription (Green-API or Evolution API)
       if (
+        evoMsg?.imageMessage ||
         msgType === 'imageMessage' ||
         fileData?.mimeType?.startsWith('image')
       ) {
         if (fileData?.caption) {
           messageBody = `${fileData.caption} ${messageBody}`.trim();
         }
-        if (fileData?.downloadUrl) {
+        const evoImgBase64 = json?.data?.message?.base64 || json?.data?.base64;
+        if (evoImgBase64) {
+          imageData = {
+            base64: evoImgBase64,
+            mimeType: evoMsg?.imageMessage?.mimetype || 'image/jpeg',
+          };
+        } else if (evoMsg?.imageMessage && EVOLUTION_API_URL && EVOLUTION_API_KEY) {
           try {
-            const imgRes = await fetch(fileData.downloadUrl);
+            const mediaRes = await fetch(
+              `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${EVOLUTION_INSTANCE}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+                body: JSON.stringify({ message: json.data, convertToMp4: false }),
+                signal: AbortSignal.timeout(7000),
+              }
+            );
+            if (mediaRes.ok) {
+              const mJson = await mediaRes.json();
+              if (mJson?.base64) {
+                imageData = {
+                  base64: mJson.base64,
+                  mimeType: mJson.mimetype || evoMsg.imageMessage.mimetype || 'image/jpeg',
+                };
+              }
+            }
+          } catch (e) {
+            console.warn('Evolution image fetch failed:', e);
+          }
+        } else if (fileData?.downloadUrl) {
+          try {
+            const imgRes = await fetch(fileData.downloadUrl, { signal: AbortSignal.timeout(6000) });
             if (imgRes.ok) {
               const buf = await imgRes.arrayBuffer();
               imageData = {
@@ -1950,9 +2080,11 @@ export async function GET() {
   return NextResponse.json({
     status: 'healthy',
     engine: 'RetainNG WhatsApp AI Concierge v4 (Gemini 2.5 + Groq OSS-120B/Whisper + OpenRouter Free Vision)',
+    active_whatsapp_provider: WHATSAPP_PROVIDER,
+    evolution_configured: Boolean(EVOLUTION_API_URL && EVOLUTION_API_KEY),
     gemini_diagnostics: geminiTestResult,
     groq_diagnostics: groqTestResult,
     openrouter_diagnostics: openRouterTestResult,
-    supported_gateways: ['Green-API', 'Twilio WhatsApp API', 'Meta Cloud API'],
+    supported_gateways: ['Evolution API (Render + Postgres)', 'Green-API', 'Twilio WhatsApp API', 'Meta Cloud API'],
   });
 }
