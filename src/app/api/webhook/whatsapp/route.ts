@@ -1199,6 +1199,9 @@ async function handleMerchantSelfOnboard(
   };
 }
 
+// Deduplicate identical webhook deliveries (e.g., if both Global + Instance webhooks are enabled on Evolution API)
+const processedMessageIds = new Map<string, number>();
+
 export async function POST(req: NextRequest) {
   const host = req.headers.get('host') || 'retainng.vercel.app';
   try {
@@ -1231,6 +1234,44 @@ export async function POST(req: NextRequest) {
       }
       if (json?.data?.key?.fromMe === true) {
         return NextResponse.json({ ignored: 'evolution-from-me' });
+      }
+
+      // 3. Deduplicate by message ID (prevents double replies if both global & instance webhooks fire)
+      const incomingMsgId = String(json?.data?.key?.id || json?.idMessage || '').trim();
+      if (incomingMsgId) {
+        const now = Date.now();
+        // Prune entries older than 60s
+        for (const [k, ts] of processedMessageIds.entries()) {
+          if (now - ts > 60000) processedMessageIds.delete(k);
+        }
+        if (processedMessageIds.has(incomingMsgId)) {
+          return NextResponse.json({ ignored: 'duplicate-message-id', id: incomingMsgId });
+        }
+        processedMessageIds.set(incomingMsgId, now);
+      }
+
+      // Mark Evolution message as read (turns single check ✓ into double blue check ✓✓)
+      if (
+        WHATSAPP_PROVIDER === 'evolution' &&
+        EVOLUTION_API_URL &&
+        EVOLUTION_API_KEY &&
+        json?.data?.key?.id &&
+        json?.data?.key?.remoteJid
+      ) {
+        fetch(`${EVOLUTION_API_URL}/chat/markMessageAsRead/${EVOLUTION_INSTANCE}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+          body: JSON.stringify({
+            readMessages: [
+              {
+                remoteJid: json.data.key.remoteJid,
+                fromMe: false,
+                id: json.data.key.id,
+              },
+            ],
+          }),
+          signal: AbortSignal.timeout(3000),
+        }).catch(() => {});
       }
 
       const evoMsg = json?.data?.message;
