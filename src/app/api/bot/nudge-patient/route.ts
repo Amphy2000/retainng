@@ -5,6 +5,11 @@ const GREEN_API_ID = process.env.GREEN_API_ID || '710722811593';
 const GREEN_API_TOKEN = process.env.GREEN_API_TOKEN || 'c7cea54f5c6f4d31a9b74eb6576493a8ec085b4f65a04a62b5';
 const GREEN_API_URL = process.env.GREEN_API_URL || 'https://7107.api.greenapi.com';
 
+const EVOLUTION_API_URL = (process.env.EVOLUTION_API_URL || '').replace(/\/+$/, '');
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || 'retainng';
+const WHATSAPP_PROVIDER = (process.env.WHATSAPP_PROVIDER || (EVOLUTION_API_URL ? 'evolution' : 'greenapi')).toLowerCase();
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -45,11 +50,19 @@ export async function POST(req: NextRequest) {
         `Reply directly to this WhatsApp message or send a photo of your container! 🌟`;
     }
 
-    const res = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendMessage/${GREEN_API_TOKEN}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, message }),
-    });
+    const useEvolution = WHATSAPP_PROVIDER === 'evolution' && EVOLUTION_API_URL && EVOLUTION_API_KEY;
+    const res = useEvolution
+      ? await fetch(`${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+          body: JSON.stringify({ number: cleanPhone, text: message }),
+          signal: AbortSignal.timeout(8000),
+        })
+      : await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendMessage/${GREEN_API_TOKEN}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId, message }),
+        });
 
     const data = await res.json();
 
@@ -69,20 +82,27 @@ export async function POST(req: NextRequest) {
       const audioUrl = `https://retainng.vercel.app/api/tts?lang=${langCode}&text=${encodeURIComponent(voiceText)}`;
 
       try {
-        const vRes = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chatId,
-            urlFile: audioUrl,
-            fileName: `refill_nudge_${langCode}.mp3`,
-            caption: `🎙️ ${patientName} Refill Reminder`,
-          }),
-        });
+        const vRes = useEvolution
+          ? await fetch(`${EVOLUTION_API_URL}/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+              body: JSON.stringify({ number: cleanPhone, audio: audioUrl }),
+              signal: AbortSignal.timeout(10000),
+            })
+          : await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chatId,
+                urlFile: audioUrl,
+                fileName: `refill_nudge_${langCode}.mp3`,
+                caption: `🎙️ ${patientName} Refill Reminder`,
+              }),
+            });
         const vData = await vRes.json();
-        if (vRes.ok && vData?.idMessage) {
+        if (vRes.ok && (vData?.idMessage || vData?.key?.id)) {
           voiceSent = true;
-          voiceMessageId = vData.idMessage;
+          voiceMessageId = vData.idMessage || vData.key?.id;
         }
       } catch (err) {
         console.warn('Audio nudge dispatch error:', err);

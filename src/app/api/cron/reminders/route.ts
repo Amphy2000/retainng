@@ -18,8 +18,29 @@ const GREEN_API_ID = process.env.GREEN_API_ID || '710722811593';
 const GREEN_API_TOKEN = process.env.GREEN_API_TOKEN || 'c7cea54f5c6f4d31a9b74eb6576493a8ec085b4f65a04a62b5';
 const GREEN_API_URL = process.env.GREEN_API_URL || 'https://7107.api.greenapi.com';
 
+const EVOLUTION_API_URL = (process.env.EVOLUTION_API_URL || '').replace(/\/+$/, '');
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || 'retainng';
+const WHATSAPP_PROVIDER = (process.env.WHATSAPP_PROVIDER || (EVOLUTION_API_URL ? 'evolution' : 'greenapi')).toLowerCase();
+
 async function sendWhatsApp(toPhone: string, message: string): Promise<boolean> {
   const cleanPhone = toPhone.replace(/[^0-9]/g, '');
+
+  if (WHATSAPP_PROVIDER === 'evolution' && EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+    try {
+      const res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+        body: JSON.stringify({ number: cleanPhone, text: message }),
+        signal: AbortSignal.timeout(8000),
+      });
+      return res.ok;
+    } catch (err) {
+      console.error('Evolution cron sendText error:', err);
+      return false;
+    }
+  }
+
   const chatId = `${cleanPhone}@c.us`;
   try {
     const res = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendMessage/${GREEN_API_TOKEN}`, {
@@ -36,6 +57,22 @@ async function sendWhatsApp(toPhone: string, message: string): Promise<boolean> 
 
 async function sendWhatsAppVoice(toPhone: string, audioUrl: string): Promise<boolean> {
   const cleanPhone = toPhone.replace(/[^0-9]/g, '');
+
+  if (WHATSAPP_PROVIDER === 'evolution' && EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+    try {
+      const res = await fetch(`${EVOLUTION_API_URL}/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+        body: JSON.stringify({ number: cleanPhone, audio: audioUrl }),
+        signal: AbortSignal.timeout(10000),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('Evolution cron voice warning:', err);
+      return false;
+    }
+  }
+
   const chatId = `${cleanPhone}@c.us`;
   try {
     const res = await fetch(`${GREEN_API_URL}/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`, {
