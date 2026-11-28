@@ -177,14 +177,14 @@ export async function GET(req: NextRequest) {
     try {
       const { data: allBiz } = await supabaseAdmin
         .from('businesses')
-        .select('id, name, opt_in_slug, subscription_status, subscription_renewal_date, manager_phone');
+        .select('id, name, opt_in_slug, subscription_status, subscription_renewal_date, manager_alert_phone, phone');
 
       const host = req.headers.get('host') || 'retainng.vercel.app';
       const protocol = host.includes('localhost') ? 'http' : 'https';
 
       for (const biz of allBiz || []) {
         if (!biz.subscription_renewal_date) continue;
-        const targetPhone = biz.manager_phone || '2349169153129';
+        const targetPhone = (biz.manager_alert_phone || biz.phone || '2349169153129').replace(/[^0-9]/g, '');
         const renewalDate = new Date(biz.subscription_renewal_date);
         const daysUntilExpiry = Math.ceil((renewalDate.getTime() - now.getTime()) / 86400000);
         const billingUrl = `${protocol}://${host}/billing/${biz.opt_in_slug}`;
@@ -248,8 +248,18 @@ export async function GET(req: NextRequest) {
         const firstName = cust.full_name ? cust.full_name.split(' ')[0] : 'there';
         const tags = cust.tags || [];
 
-        // Check if customer is due for 25-day refill or morning adherence check-in
+        // Anti-spam guard: skip if already reminded in the last 7 days (unless ?send_test=true)
         const sendTest = req.nextUrl.searchParams.get('send_test') === 'true';
+        const remindedTag = tags.find((t: string) => t.startsWith('Reminded:'));
+        if (!sendTest && remindedTag) {
+          const lastReminded = new Date(remindedTag.replace('Reminded:', ''));
+          const daysSinceReminded = Math.floor((now.getTime() - lastReminded.getTime()) / 86400000);
+          if (!isNaN(daysSinceReminded) && daysSinceReminded < 7) {
+            continue;
+          }
+        }
+
+        // Check if customer is due for 25-day refill or morning adherence check-in
         const isAdherenceMode = req.nextUrl.searchParams.get('type') === 'adherence';
         let isDue = sendTest;
         let isAdherence = isAdherenceMode;
@@ -306,8 +316,17 @@ export async function GET(req: NextRequest) {
           }
 
           // 1. Send text reminder
-          await sendWhatsApp(cust.phone, reminderMsg);
-          results.reminders_sent++;
+          const sentOk = await sendWhatsApp(cust.phone, reminderMsg);
+          if (sentOk) {
+            results.reminders_sent++;
+            const todayStr = now.toISOString().split('T')[0];
+            const nextTags = tags.filter((t: string) => !t.startsWith('Reminded:'));
+            nextTags.push(`Reminded:${todayStr}`);
+            await supabaseAdmin
+              .from('customers')
+              .update({ tags: nextTags, updated_at: now.toISOString() })
+              .eq('id', cust.id);
+          }
 
           // 2. Proactively send voice note in their native tongue
           if (prefersVoice) {
